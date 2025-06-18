@@ -1,0 +1,18 @@
+[package]
+name = "axum-logging-service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.6"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "registry", "fmt"] }
+ tower-http = { version = "0.4", features = ["request-id", "trace"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+reqwest = { version = "0.11", features = ["json"] }
+serde_json = "1.0"
+hyper = "0.14"
+tower = { version = "0.4", features = ["util"] }
