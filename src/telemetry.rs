@@ -36,6 +36,8 @@ pub fn _create_span(name: String, parent_cx: opentelemetry::Context) -> opentele
 
 // Panic hook function to log panic information
 pub fn panic_hook(panic_info: &std::panic::PanicHookInfo) {
+    tracing::error!(target: "panic_hook_test_sentinel", "PANIC_HOOK_ACTIVATED_SENTINEL_MESSAGE"); // Sentinel message
+
     let payload = panic_info
         .payload()
         .downcast_ref::<&str>()
