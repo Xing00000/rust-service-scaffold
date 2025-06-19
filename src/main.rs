@@ -13,6 +13,9 @@ use tracing::Level;
 // Use the logging module from the library crate
 use axum_logging_service::logging;
 use axum_logging_service::telemetry; // Added import
+use axum_logging_service::error::AppError; // Import AppError
+use axum::extract::Query; // To read query parameters
+use serde::Deserialize; // To deserialize query parameters
 
 // OpenTelemetry imports
 use axum_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
@@ -50,6 +53,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(handler))
+        .route("/test_error", get(test_error_handler)) // New route
         // OpenTelemetry layers
         .layer(OtelAxumLayer::default()) // Captures trace for incoming requests
         .layer(OtelInResponseLayer::default()) // Adds trace context to response headers
@@ -93,14 +97,27 @@ async fn main() {
         .unwrap();
 }
 
-async fn handler(Extension(request_id_extension): Extension<RequestId>) -> String {
+#[derive(Deserialize)]
+struct HandlerParams {
+    make_error: Option<bool>,
+}
+
+async fn handler(
+    Extension(request_id_extension): Extension<RequestId>,
+    Query(params): Query<HandlerParams>, // Read query parameters
+) -> Result<String, AppError> { // Return Result<String, AppError>
     let request_id = request_id_extension
         .header_value()
         .to_str()
         .unwrap_or("unknown")
         .to_string();
 
-    // Add an event to the current request span (created by OtelAxumLayer)
+    if params.make_error.unwrap_or(false) {
+        tracing::info!("Simulating an error for request_id: {}", request_id);
+        // Example of returning a BadRequest error
+        return Err(AppError::BadRequest(format!("Triggered error for request_id: {}", request_id)));
+    }
+
     let current_otel_cx = OtelContext::current();
     let current_otel_span = current_otel_cx.span();
     current_otel_span.add_event(
@@ -109,28 +126,25 @@ async fn handler(Extension(request_id_extension): Extension<RequestId>) -> Strin
     );
 
     let greeting_message = "Hello, World!";
-
-    // Create a custom child span using tracing macros
-    // This span will be a child of the request span from OtelAxumLayer
     let response_body = {
         let _custom_work_span_guard = tracing::info_span!(
             "custom_work_in_handler",
-            service_operation = "generate_greeting", // Custom attribute for the span
-            request_id = %request_id // Propagate request_id to child span's attributes
-        ).entered(); // Enter the span, making it current for this block
-
-        // Simulate some work inside the custom span
+            service_operation = "generate_greeting",
+            request_id = %request_id
+        ).entered();
         tracing::info!("Performing custom work: generating greeting message for request_id: {}", request_id);
-        // In a real app, this could be a database call or some business logic
-        // tokio::time::sleep(std::time::Duration::from_millis(25)).await; // example delay
-
         format!("{} Request ID: {}", greeting_message, request_id)
     };
 
     current_otel_span.add_event("Handler logic completed".to_string(), vec![]);
     tracing::info!("Request processing finished for request_id: {}", request_id);
 
-    response_body
+    Ok(response_body) // Return Ok response
+}
+
+// New handler to specifically test error responses
+async fn test_error_handler() -> Result<&'static str, AppError> {
+    Err(AppError::InternalServerError)
 }
 
 // New handler for /metrics endpoint
