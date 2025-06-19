@@ -9,7 +9,7 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "registry", "fmt"] }
  tower-http = { version = "0.6.6", features = ["request-id", "trace"] }
-opentelemetry = "0.30"
+opentelemetry = { version = "0.30", features = ["trace", "metrics"] }
 opentelemetry_sdk = { version = "0.30", features = ["rt-tokio"] }
 opentelemetry-jaeger = { version = "0.22.0", features = ["rt-tokio", "isahc_collector_client"] }
 opentelemetry-prometheus = "0.29.1"
@@ -19,6 +19,7 @@ axum-tracing-opentelemetry = "0.29.0" # This line will be problematic, but I'll 
 thiserror = "2.0.12"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+opentelemetry-semantic-conventions = "0.30.0"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

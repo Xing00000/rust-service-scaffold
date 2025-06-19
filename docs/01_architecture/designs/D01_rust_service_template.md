@@ -153,9 +153,15 @@ pub fn get_subscriber(config: &LogConfig) -> impl Subscriber + Send + Sync {
 
 #### 設計要點:
 
-1.  **全局 Panic Hook**: 服務啟動時設置 `std::panic::set_hook`，捕獲主線程和其他非 Tokio 任務的 Panic。這是最後一道防線。
+1.  **全局 Panic Hook**: 服務啟動時，在 `main` 函數早期通過 `std::panic::set_hook` 設置了一個全局 panic hook。此 hook 作為最後一道防線，旨在捕獲所有未處理的 panic，確保服務的穩定性。
+    - **日誌記錄**: 當 panic 發生時，hook 會使用 `tracing::error!` 記錄以下詳細信息。這些日誌遵循應用配置的結構化日誌格式 (默認為 JSON)，以便於後續分析和告警：
+        - **Panic Payload**: panic 時傳遞的具體錯誤消息或數據。
+        - **Panic Location**: 發生 panic 的源代碼位置 (包括文件名、行號和列號)，前提是 `PanicInfo` 結構能夠提供此類信息。
+        - **Backtrace**: 詳細的函數調用堆棧追蹤。此信息在環境變量 `RUST_BACKTRACE=1` 被設置時由 `std::backtrace::Backtrace::capture()` 自動捕獲並記錄，極大地幫助了問題定位的深度。
+    - **遙測數據刷寫 (Telemetry Data Flushing)**: (TODO) 理想情況下，panic hook 在記錄錯誤後，應嘗試優雅地關閉並刷寫所有緩存中的遙測數據（如追踪和指標），以確保在服務終止前最大限度地保留可觀測性數據。然而，由於在當前目標構建環境中遇到了 `opentelemetry::global::shutdown_tracer_provider()` 和 `shutdown_meter_provider()` 相關函數的編譯時解析錯誤 (E0425)，此遙測數據刷寫功能暫時被省略。待相關環境或依賴問題解決後，將重新審視並實現此功能。
+    - 此 panic hook 的實現旨在滿足 T01.2.5 (Panic Handling and Reporting) 的核心要求，相關的配置和行為文檔（即本節更新）對應 T01.2.7 (Documentation of Panic Handling)。
 2.  **安全的異步任務**:
-    - **Tokio Task Panics**: 標準 hook 無法捕獲 `tokio::spawn` 產生的 panic。
+    - **Tokio Task Panics**: 標準的 `std::panic::set_hook` 所設置的 hook 可能無法直接捕獲由 `tokio::spawn` 創建的異步任務內部發生的 panic，因為這些任務可能在不同的線程或上下文中運行。
     - **解決方案**: 提供一個 `telemetry::spawn_instrumented` 輔助函數。此函數在內部使用 `tracing::Instrument` 為每個異步任務附加一個 `Span`，並在任務完成時檢查其結果。如果任務 panic，則在此處捕獲並記錄錯誤。
 3.  **文檔警告**: 模板的 `README.md` 中將明確警告開發者，必須使用 `spawn_instrumented` 來啟動所有背景任務，以確保 Panic 不會被“吞噬”。
 

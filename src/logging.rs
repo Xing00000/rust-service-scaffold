@@ -1,7 +1,9 @@
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
-use tracing_subscriber::fmt::{self, Layer as FmtLayer}; // Removed format::JsonFields as it's not directly used
+use tracing_subscriber::fmt::Layer as FmtLayer; // Removed unused 'self'
 use tracing_opentelemetry::OpenTelemetryLayer;
-use opentelemetry::global;
+// Remove opentelemetry::global, as we'll use a specific tracer
+// use opentelemetry::global;
+use crate::telemetry; // Import the telemetry module to access init_tracer
 
 pub fn init_subscriber() {
     let env_filter = EnvFilter::try_from_default_env()
@@ -12,18 +14,26 @@ pub fn init_subscriber() {
         .json() // Output logs in JSON format
         .with_current_span(true) // Include current span info
         .with_span_list(true) // Include span list (shows parent spans)
-        .with_timer(fmt::time::rfc_3339()) // Use RFC 3339 timestamps
+        .with_timer(tracing_subscriber::fmt::time::SystemTime) // Use SystemTime for timestamps
         .with_thread_ids(true) // Include thread IDs
         .with_thread_names(true); // Include thread names
 
-    // Get the global tracer for OpenTelemetry layer
-    // The name here is for the tracing instrumentation, not the service name itself.
-    let tracer = global::tracer("axum-logging-service/tracing-integration");
-    let otel_layer = OpenTelemetryLayer::new(tracer);
-
-    Registry::default()
-        .with(env_filter)
-        .with(formatter) // Add the JSON formatting layer
-        .with(otel_layer) // Add the OpenTelemetry layer to link tracing and OTel contexts
-        .init(); // Set this subscriber as the global default
+    // Initialize our tracer
+    match telemetry::init_tracer() {
+        Ok(tracer) => {
+            let otel_layer = OpenTelemetryLayer::new(tracer);
+            Registry::default()
+                .with(env_filter)
+                .with(formatter) // Add the JSON formatting layer
+                .with(otel_layer) // Add the OpenTelemetry layer to link tracing and OTel contexts
+                .init(); // Set this subscriber as the global default
+        },
+        Err(e) => {
+            eprintln!("Failed to initialize OpenTelemetry tracer: {:?}. Proceeding without OpenTelemetry layer.", e);
+            Registry::default()
+                .with(env_filter)
+                .with(formatter) // Add the JSON formatting layer
+                .init(); // Set this subscriber as the global default without OTel
+        }
+    };
 }

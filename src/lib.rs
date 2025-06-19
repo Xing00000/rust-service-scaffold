@@ -2,3 +2,4 @@
 pub mod logging;
 pub mod telemetry;
 pub mod error;
+pub mod handlers;
