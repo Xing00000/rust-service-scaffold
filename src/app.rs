@@ -3,6 +3,7 @@ use crate::infrastructure::telemetry;
 use crate::infrastructure::web::handlers;
 use crate::{config::Config, infrastructure::web::metrics};
 use axum::{middleware, routing::get, Router};
+use hyper::header::{HeaderName, HeaderValue};
 use prometheus::Registry;
 
 use std::net::SocketAddr;
@@ -10,9 +11,10 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::{
     request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
+    set_header::SetResponseHeaderLayer,
     trace::TraceLayer,
 };
-use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer, Quota};
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
@@ -32,9 +34,18 @@ impl Application {
         std::panic::set_hook(Box::new(telemetry::panic_hook));
 
         let app_state = AppState {
-            config: Arc::new(config.clone()),
+            config: Arc::new(config.clone()), // Clone config for app_state
             registry: Arc::new(registry),
         };
+
+        // Configure Governor for rate limiting using values from Config
+        let governor_config = Arc::new(
+            GovernorConfigBuilder::default()
+                .per_second(config.rate_limit_per_second)
+                .burst_size(config.rate_limit_burst_size)
+                .finish()
+                .unwrap(),
+        );
 
         let tracked_routes = Router::new()
             .route("/", get(handlers::main_handler))
@@ -50,21 +61,31 @@ impl Application {
             .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
             // Add GovernorLayer for rate limiting
             .layer(GovernorLayer {
-                config: Arc::new(
-                    GovernorConfigBuilder::default()
-                        .burst_size(2) // Allow 2 requests per second
-                        .finish()
-                        .unwrap(),
-                ),
+                config: governor_config,
             });
 
         let untracked_routes = Router::new().route("/metrics", get(handlers::metrics_handler));
 
         // ✅ 將兩個 Router 合併，並應用最終的 state
-        let router = Router::new()
+        let mut router = Router::new()
             .merge(tracked_routes)
-            .merge(untracked_routes)
-            .with_state(app_state);
+            .merge(untracked_routes);
+
+        // Apply HTTP headers from config
+        if let Some(headers_config) = &app_state.config.http_headers {
+            for header_config in headers_config {
+                let header_name = HeaderName::from_bytes(header_config.name.as_bytes())
+                    .expect(&format!("Invalid header name in config: {}", header_config.name));
+                let header_value = HeaderValue::from_str(&header_config.value)
+                    .expect(&format!("Invalid header value for {}: {}", header_config.name, header_config.value));
+                router = router.layer(SetResponseHeaderLayer::if_not_present(
+                    header_name.clone(), // Clone since it's used in the error message too
+                    header_value,
+                ));
+            }
+        }
+
+        let router = router.with_state(app_state);
 
         let addr = SocketAddr::from(([127, 0, 0, 1], config.port));
         let listener = TcpListener::bind(addr).await?;

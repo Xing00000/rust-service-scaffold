@@ -9,3 +9,27 @@ otel_service_name = "my-rust-service"
 # 注意: 對於本地開發，您可能需要一個 OTLP 收集器 (如 Jaeger 或 OpenTelemetry Collector)
 # 在此地址上運行，以便接收追踪數據。
 otel_exporter_otlp_endpoint = "http://localhost:4317"
+
+# Rate Limiting
+rate_limit_per_second = 100
+rate_limit_burst_size = 50
+
+# HTTP Headers
+# You can define a list of HTTP headers to be added to every response.
+# These are applied if the header is not already present in the response.
+[[http_headers]]
+name = "X-Content-Type-Options"
+value = "nosniff"
+
+[[http_headers]]
+name = "X-Frame-Options"
+value = "DENY"
+
+[[http_headers]]
+name = "Content-Security-Policy"
+value = "default-src 'self'; frame-ancestors 'none'"
+
+# Example of a custom header:
+# [[http_headers]]
+# name = "X-My-Custom-Header"
+# value = "MyCustomValue"

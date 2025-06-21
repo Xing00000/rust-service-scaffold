@@ -8,6 +8,14 @@ use serde::Deserialize;
 use validator::Validate;
 
 #[derive(Deserialize, Validate, Debug, Clone)]
+pub struct HttpHeader {
+    #[validate(length(min = 1))]
+    pub name: String,
+    #[validate(length(min = 1))]
+    pub value: String,
+}
+
+#[derive(Deserialize, Validate, Debug, Clone)]
 pub struct Config {
     #[validate(range(min = 1024, max = 65535))]
     pub port: u16,
@@ -20,6 +28,16 @@ pub struct Config {
 
     #[validate(length(min = 1))]
     pub otel_service_name: String,
+
+    // <-- 新增: 限流器每秒允許的請求數量
+    #[validate(range(min = 1))]
+    pub rate_limit_per_second: u64,
+
+    // <-- 新增: 限流器允許的突發請求數量
+    #[validate(range(min = 1))]
+    pub rate_limit_burst_size: u32,
+
+    pub http_headers: Option<Vec<HttpHeader>>,
 }
 
 impl Config {
