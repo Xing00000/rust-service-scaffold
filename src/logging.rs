@@ -1,12 +1,12 @@
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
-use tracing_subscriber::fmt::Layer as FmtLayer;
-use tracing_opentelemetry::OpenTelemetryLayer;
 use opentelemetry_sdk::trace::Tracer as SdkTracer; // Import and alias SdkTracer
-use tracing::info; // For logging the message when OTel is not initialized
+use tracing::info;
+use tracing_opentelemetry::OpenTelemetryLayer;
+use tracing_subscriber::fmt::Layer as FmtLayer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry}; // For logging the message when OTel is not initialized
 
-pub fn init_subscriber(tracer: Option<SdkTracer>) { // Updated signature
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+pub fn init_subscriber(tracer: Option<SdkTracer>) {
+    // Updated signature
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     let formatter = FmtLayer::default()
         .json()
@@ -16,9 +16,7 @@ pub fn init_subscriber(tracer: Option<SdkTracer>) { // Updated signature
         .with_thread_ids(true)
         .with_thread_names(true);
 
-    let subscriber = Registry::default()
-        .with(env_filter)
-        .with(formatter);
+    let subscriber = Registry::default().with(env_filter).with(formatter);
 
     if let Some(tracer) = tracer {
         let otel_layer = OpenTelemetryLayer::new(tracer);

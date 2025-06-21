@@ -3,22 +3,22 @@ use axum::{
     routing::get,
     Router,
 };
-use tokio::net::TcpListener;
+use serde::Deserialize;
 use std::net::SocketAddr;
+use tokio::net::TcpListener;
 use tower_http::{
     request_id::{PropagateRequestIdLayer, RequestId},
     trace::{DefaultOnResponse, TraceLayer},
 };
 use tracing::Level;
-use serde::Deserialize;
 
+use crate::error::AppError;
+use crate::handlers; // For panic_handler
 use crate::logging;
 use crate::telemetry;
-use crate::handlers; // For panic_handler
-use crate::error::AppError;
 
 // OpenTelemetry imports for handler context
-use opentelemetry::{Context as OtelContext, trace::TraceContextExt};
+use opentelemetry::{trace::TraceContextExt, Context as OtelContext};
 
 pub struct Application {
     router: Router,
@@ -103,7 +103,10 @@ async fn handler(
 
     if params.make_error.unwrap_or(false) {
         tracing::info!("Simulating an error for request_id: {}", request_id);
-        return Err(AppError::BadRequest(format!("Triggered error for request_id: {}", request_id)));
+        return Err(AppError::BadRequest(format!(
+            "Triggered error for request_id: {}",
+            request_id
+        )));
     }
 
     let current_otel_cx = OtelContext::current();
@@ -115,8 +118,12 @@ async fn handler(
             "custom_work_in_handler",
             service_operation = "generate_greeting",
             request_id = %request_id
-        ).entered();
-        tracing::info!("Performing custom work: generating greeting message for request_id: {}", request_id);
+        )
+        .entered();
+        tracing::info!(
+            "Performing custom work: generating greeting message for request_id: {}",
+            request_id
+        );
         format!("{} Request ID: {}", greeting_message, request_id)
     };
 

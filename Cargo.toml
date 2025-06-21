@@ -26,3 +26,5 @@ reqwest = { version = "0.12.20", features = ["json"] } # Assuming this version i
 serde_json = "1.0.115" # Matching the version in dependencies as per common practice, though not explicitly requested for dev.
 hyper = "1.6.0" # Assuming this version is fine, not specified in requirements
 tower = { version = "0.4.13", features = ["util"] }
+tracing-futures = "0.2"
+once_cell = "1.19.0"

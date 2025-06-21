@@ -1,12 +1,12 @@
 use opentelemetry::global;
-use opentelemetry_sdk::trace as sdktrace;
-use opentelemetry::trace::TraceError;
 use opentelemetry::metrics::MeterProvider;
-use opentelemetry_sdk::{Resource, runtime}; // Added runtime
-use opentelemetry_sdk::trace::Config as SdkTraceConfig; // Aliased to avoid conflict if opentelemetry::trace::Config is used
-use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
 use opentelemetry::trace::TraceContextExt;
+use opentelemetry::trace::TraceError;
 use opentelemetry_otlp::WithExportConfig; // Added for OTLP exporter
+use opentelemetry_sdk::trace as sdktrace;
+use opentelemetry_sdk::trace::Config as SdkTraceConfig; // Aliased to avoid conflict if opentelemetry::trace::Config is used
+use opentelemetry_sdk::{runtime, Resource}; // Added runtime
+use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
 use std::env; // For reading environment variables
 
 // Function to initialize the OTLP tracer
@@ -14,14 +14,17 @@ pub fn init_tracer() -> Result<sdktrace::Tracer, TraceError> {
     let otlp_endpoint = env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
         .unwrap_or_else(|_| "http://localhost:4317".to_string());
 
-    let service_name = env::var("OTEL_SERVICE_NAME")
-        .unwrap_or_else(|_| "axum-logging-service".to_string());
+    let service_name =
+        env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| "axum-logging-service".to_string());
 
     let exporter = opentelemetry_otlp::new_exporter()
         .tonic()
         .with_endpoint(otlp_endpoint);
 
-    let resource = Resource::new(vec![opentelemetry::KeyValue::new(SERVICE_NAME, service_name)]);
+    let resource = Resource::new(vec![opentelemetry::KeyValue::new(
+        SERVICE_NAME,
+        service_name,
+    )]);
 
     let tracer = opentelemetry_otlp::new_pipeline()
         .tracing()
@@ -34,9 +37,15 @@ pub fn init_tracer() -> Result<sdktrace::Tracer, TraceError> {
 
 // Function to initialize the Prometheus meter provider
 pub fn init_meter_provider() -> impl MeterProvider {
-    let service_name = std::env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| "axum-service".to_string());
-    let resource = Resource::new(vec![opentelemetry::KeyValue::new(SERVICE_NAME, service_name)]);
-    opentelemetry_sdk::metrics::SdkMeterProvider::builder().with_resource(resource).build()
+    let service_name =
+        std::env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| "axum-service".to_string());
+    let resource = Resource::new(vec![opentelemetry::KeyValue::new(
+        SERVICE_NAME,
+        service_name,
+    )]);
+    opentelemetry_sdk::metrics::SdkMeterProvider::builder()
+        .with_resource(resource)
+        .build()
 }
 
 // Helper function to make a span and set it as parent
@@ -55,11 +64,21 @@ pub fn panic_hook(panic_info: &std::panic::PanicHookInfo) {
         .payload()
         .downcast_ref::<&str>()
         .copied()
-        .or_else(|| panic_info.payload().downcast_ref::<String>().map(|s| s.as_str()))
+        .or_else(|| {
+            panic_info
+                .payload()
+                .downcast_ref::<String>()
+                .map(|s| s.as_str())
+        })
         .unwrap_or("unknown panic payload");
 
     let location = panic_info.location().map(|loc| {
-        format!("file: {}, line: {}, column: {}", loc.file(), loc.line(), loc.column())
+        format!(
+            "file: {}, line: {}, column: {}",
+            loc.file(),
+            loc.line(),
+            loc.column()
+        )
     });
 
     let backtrace = std::backtrace::Backtrace::capture();

@@ -33,7 +33,6 @@ pub enum AppError {
 
     #[error("Failed to (de)serialize JSON: {0}")]
     SerdeJsonError(#[from] serde_json::Error),
-
     // Placeholder for future Reqwest errors
     // #[error("External API request failed: {0}")]
     // ReqwestError(#[from] reqwest::Error),
@@ -46,21 +45,18 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_code, error_message) = match &self {
-            AppError::InternalServerError => {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "INTERNAL_SERVER_ERROR".to_string(),
-                    "An internal server error occurred.".to_string(),
-                )
-            }
-            AppError::BadRequest(reason) => {
-                (
-                    StatusCode::BAD_REQUEST,
-                    "BAD_REQUEST".to_string(),
-                    reason.clone(),
-                )
-            }
-            AppError::SerdeJsonError(ref _err) => { // _err is not directly used in client message
+            AppError::InternalServerError => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_SERVER_ERROR".to_string(),
+                "An internal server error occurred.".to_string(),
+            ),
+            AppError::BadRequest(reason) => (
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST".to_string(),
+                reason.clone(),
+            ),
+            AppError::SerdeJsonError(ref _err) => {
+                // _err is not directly used in client message
                 (
                     StatusCode::UNPROCESSABLE_ENTITY, // Or BAD_REQUEST
                     "INVALID_JSON".to_string(),
