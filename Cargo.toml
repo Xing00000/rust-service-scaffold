@@ -31,6 +31,7 @@ figment = { version = "0.10", features = ["toml", "env"] }
 dotenvy = "0.15"
 validator = { version = "0.18", features = ["derive"] }
 once_cell = "1.19.0"
+tower_governor = "0.7.0" # Updated to version from docs
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

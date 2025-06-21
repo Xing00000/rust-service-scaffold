@@ -112,6 +112,94 @@ You can use Docker Compose to easily run Jaeger and Prometheus locally.
     -   **Jaeger UI** (Traces): Open `http://localhost:16686` in your browser. Select your service (`my-axum-app` or whatever `OTEL_SERVICE_NAME` you set) and find traces.
     -   **Prometheus UI** (Metrics): Open `http://localhost:9090`. You can query metrics like `http_server_active_requests`, `http_server_duration_seconds_count`, or `http_server_duration_seconds_bucket`. The exact metric names are defined by the OpenTelemetry HTTP semantic conventions. Check the `/metrics` endpoint of your service (e.g., `http://localhost:3000/metrics`) for available metrics.
 
+## Rate Limiting (Tower Governor)
+
+This service uses `tower_governor` for rate limiting to protect against excessive requests.
+
+### Configuration
+
+The rate limiter is configured in `src/app.rs`. By default, it is set to allow a burst size of 2 requests per second.
+
+```rust
+// Example configuration in src/app.rs
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
+// ...
+    .layer(
+        GovernorLayer::new(&Arc::new(
+            GovernorConfigBuilder::default()
+                .burst_size(2) // Allow 2 requests per second
+                .finish()
+                .unwrap(),
+        ))
+    );
+```
+
+You can adjust the `burst_size` and other parameters (like `per_second`, `per_minute`, etc.) in `GovernorConfigBuilder` as needed. Refer to the `tower_governor` documentation for more advanced configurations.
+
+### Integration with Redis for Multi-Replica Deployments
+
+When deploying multiple instances of the service, a distributed rate limiter is necessary to ensure consistent behavior. `tower_governor` supports using Redis as a backend for this purpose.
+
+To integrate with Redis:
+
+1.  **Add Redis dependencies**:
+    You'll need to add `tower_governor` with the `redis` feature and a Redis client like `r2d2_redis` or `redis` (async).
+    ```toml
+    # In Cargo.toml
+    tower_governor = { version = "0.4.1", features = ["redis"] }
+    r2d2 = "0.8"
+    r2d2_redis = "0.14" # Or an async redis client
+    # OR if using async redis directly:
+    # redis = { version = "0.23", features = ["tokio-comp"] }
+    ```
+
+2.  **Configure Governor with RedisStateStore**:
+    Modify `src/app.rs` to use `GovernorConfigBuilder::use_state_store` with a Redis connection pool.
+
+    ```rust
+    // Example (conceptual) for src/app.rs using r2d2_redis:
+    use tower_governor::{
+        governor::GovernorConfigBuilder,
+        key_extractor::SmartIpKeyExtractor, // To rate limit by IP
+        GovernorLayer,
+        RedisStateStore, // If using the "redis" feature
+    };
+    use r2d2_redis::{r2d2, RedisConnectionManager};
+    use std::sync::Arc;
+    // ...
+
+    // Inside your Application::build or similar setup function:
+
+    // 1. Setup Redis connection pool
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string());
+    let manager = RedisConnectionManager::new(redis_url).expect("Failed to create Redis manager");
+    let pool = r2d2::Pool::builder()
+        .build(manager)
+        .expect("Failed to create Redis pool");
+
+    // 2. Create the Redis state store
+    let state_store = RedisStateStore::new(pool);
+
+    // 3. Build the governor config using the Redis store
+    let governor_conf = Arc::new(
+        GovernorConfigBuilder::default()
+            .key_extractor(SmartIpKeyExtractor) // Rate limit based on IP
+            .burst_size(10) // Example: 10 requests
+            .period(std::time::Duration::from_secs(60)) // Per minute
+            .use_state_store(state_store)
+            .finish()
+            .unwrap(),
+    );
+
+    // 4. Add the GovernorLayer
+    // ...
+    // .layer(GovernorLayer::new(&governor_conf))
+    // ...
+    ```
+    Ensure your Redis server is running and accessible by the application. You'll need to set the `REDIS_URL` environment variable.
+
+    **Note**: The above Redis integration example is conceptual. You'll need to adapt it to your specific error handling, configuration management, and choice of synchronous/asynchronous Redis client. For an asynchronous setup (which is generally preferred with Axum/Tokio), you would use an async Redis client and an async-compatible state store if `tower_governor` provides one directly or if you build one. The current `RedisStateStore` in `tower_governor` might expect a blocking client, so careful integration is needed. If `tower_governor`'s `RedisStateStore` is blocking, running it in `tokio::spawn_blocking` might be necessary for each state access, or use a dedicated thread pool for Redis operations. Always check the `tower_governor` documentation for the most up-to-date practices for Redis integration.
+
 ### Custom Instrumentation
 
 -   **Custom Spans**: You can add custom child spans within your application logic using `tracing` macros like `tracing::info_span!`, `tracing::debug_span!`, etc. These will be automatically correlated with the parent request span due to the `tracing-opentelemetry` layer.

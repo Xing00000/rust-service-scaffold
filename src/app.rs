@@ -12,6 +12,7 @@ use tower_http::{
     request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
     trace::TraceLayer,
 };
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
@@ -45,7 +46,17 @@ impl Application {
             .layer(middleware::from_fn(metrics::track_metrics))
             .layer(TraceLayer::new_for_http())
             .layer(PropagateRequestIdLayer::x_request_id())
-            .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid));
+            // IMPORTANT: SetRequestIdLayer must be before GovernorLayer
+            .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+            // Add GovernorLayer for rate limiting
+            .layer(GovernorLayer {
+                config: Arc::new(
+                    GovernorConfigBuilder::default()
+                        .burst_size(2) // Allow 2 requests per second
+                        .finish()
+                        .unwrap(),
+                ),
+            });
 
         let untracked_routes = Router::new().route("/metrics", get(handlers::metrics_handler));
 

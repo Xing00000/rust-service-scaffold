@@ -405,3 +405,56 @@ async fn test_structured_error_response() {
         "Validation error: User triggered a bad request"
     );
 }
+
+// Test for rate limiting
+#[tokio::test]
+async fn test_rate_limiting() {
+    // use axum_logging_service::app::Application; // This was for a potential alternative way to test, not needed now
+    use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
+
+    // Configure a governor layer similar to the main application
+    // We use a small burst size and short period for faster testing.
+    let governor_conf = Arc::new(
+        GovernorConfigBuilder::default()
+            .burst_size(2) // Allow 2 requests
+            .period(std::time::Duration::from_secs(1)) // Per 1 second
+            .finish()
+            .unwrap(),
+    );
+
+    let app = Router::new()
+        .route("/", get(|| async { "Hello, world!" }))
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid)) // Ensure RequestId is available if Governor uses it
+        .layer(GovernorLayer { config: governor_conf });
+
+    use axum::extract::connect_info::ConnectInfo;
+    use std::net::SocketAddr;
+
+    let addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
+
+    // Send 2 requests, which should succeed
+    let mut request1 = Request::builder().uri("/").body(Body::empty()).unwrap();
+    request1.extensions_mut().insert(ConnectInfo(addr));
+    let response1 = app.clone().oneshot(request1).await.unwrap();
+    assert_eq!(response1.status(), StatusCode::OK);
+
+    let mut request2 = Request::builder().uri("/").body(Body::empty()).unwrap();
+    request2.extensions_mut().insert(ConnectInfo(addr));
+    let response2 = app.clone().oneshot(request2).await.unwrap();
+    assert_eq!(response2.status(), StatusCode::OK);
+
+    // Send a 3rd request, which should be rate-limited
+    let mut request3 = Request::builder().uri("/").body(Body::empty()).unwrap();
+    request3.extensions_mut().insert(ConnectInfo(addr));
+    let response3 = app.clone().oneshot(request3).await.unwrap();
+    assert_eq!(response3.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    // Wait for the rate limit period to pass (plus a small buffer)
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+
+    // Send another request, which should now succeed
+    let mut request4 = Request::builder().uri("/").body(Body::empty()).unwrap();
+    request4.extensions_mut().insert(ConnectInfo(addr));
+    let response4 = app.oneshot(request4).await.unwrap();
+    assert_eq!(response4.status(), StatusCode::OK);
+}
