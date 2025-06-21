@@ -1,16 +1,19 @@
 use axum::{routing::get, Extension, Router};
+use axum_logging_service::infrastructure::{telemetry, web::handlers};
 use serde_json::Value;
 use std::{
     panic,
     sync::{Arc, Mutex},
 };
 use tokio::time::{sleep, Duration};
+use tower::ServiceExt;
 use tower_http::{request_id::RequestId, trace::TraceLayer};
 use tracing::subscriber::with_default;
 use tracing_futures::WithSubscriber;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
 // 步驟 1 & 2: 重新引入 Mutex 來序列化 panic hook 測試
 use once_cell::sync::Lazy;
+
 static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 #[derive(Clone, Default)]
@@ -81,53 +84,105 @@ async fn test_logging_with_request_id() {
     assert!(logs.contains(r#""request_id":"test-id-123""#));
 }
 
-// 步驟 3: 將 panic hook 測試改為同步的 #[test]
 #[test]
 fn test_panic_hook_logs_details() {
-    // 步驟 3.1: 取得鎖
+    // 取得鎖以確保測試串行執行
     let _guard = TEST_MUTEX.lock().unwrap();
 
     let writer = TestWriter::new();
     let writer_for_closure = writer.clone();
-    let subscriber = Registry::default().with(EnvFilter::new("trace")).with(
-        fmt::layer()
-            .json()
-            .with_writer(move || writer_for_closure.clone()),
-    );
+    let subscriber = Registry::default()
+        .with(EnvFilter::new("trace")) // 確保捕獲所有級別的日誌
+        .with(
+            fmt::layer()
+                .json() // 確保輸出是 JSON
+                .with_writer(move || writer_for_closure.clone()),
+        );
 
-    // 步驟 3.2: 建立自己的 runtime
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
 
-    // 步驟 3.3: 設定本地日誌，並在裡面執行 runtime
+    // 在 tracing subscriber 的上下文中執行異步代碼
     with_default(subscriber, || {
         rt.block_on(async {
-            std::panic::set_hook(Box::new(axum_logging_service::telemetry::panic_hook));
-            let app = Router::new().route(
-                "/test_panic",
-                get(axum_logging_service::handlers::panic_handler),
-            );
+            // 設置自定義的 panic hook
+            std::panic::set_hook(Box::new(telemetry::panic_hook));
+
+            // 創建一個簡單的 app，只包含會 panic 的路由
+            let app = Router::new().route("/test_panic", get(handlers::panic_handler));
+
+            // 在一個新的 tokio 任務中發送請求，以模擬 Axum 的運行環境
             let task_handle = tokio::spawn(async move {
                 let request = hyper::Request::builder()
                     .uri("/test_panic")
                     .body(axum::body::Body::empty())
                     .unwrap();
-                use tower::ServiceExt;
+                // `oneshot` 會發送請求並等待響應
                 let _ = app.oneshot(request).await;
             });
+
+            // 等待任務完成。因為 handler 會 panic，所以這裡應該返回 Err
             let result = task_handle.await;
             assert!(
                 result.is_err(),
                 "Spawned task should have panicked but did not."
             );
-            sleep(Duration::from_millis(100)).await;
+
+            // 稍作等待，確保日誌有時間被處理和寫入
+            sleep(Duration::from_millis(150)).await;
         });
     });
 
+    // 獲取所有日誌
     let logs = writer.get_logs();
-    assert!(logs.contains("PANIC_HOOK_ACTIVATED_SENTINEL_MESSAGE"));
+
+    // 添加調試輸出，這在 CI 環境中尤其有用
+    if logs.is_empty() {
+        panic!("FAILED: No logs were captured!");
+    }
+    println!("--- CAPTURED LOGS ---\n{}\n--- END LOGS ---", logs);
+
+    // 解析日誌並進行精確斷言
+    let mut panic_log_found = false;
+    for line in logs.lines().filter(|l| !l.is_empty()) {
+        let log_entry: Value = serde_json::from_str(line)
+            .unwrap_or_else(|e| panic!("Failed to parse log line as JSON: {}\nLine: {}", e, line));
+
+        // 我們要找的是由 panic_hook 產生的日誌
+        if log_entry["target"] == "panic" {
+            panic_log_found = true;
+
+            // 斷言日誌級別
+            assert_eq!(
+                log_entry["level"], "ERROR",
+                "Panic log level should be ERROR"
+            );
+
+            // 斷言 panic 的消息負載
+            let payload = log_entry["fields"]["payload"].as_str().unwrap();
+            assert!(
+                payload.contains("This is a test panic deliberately triggered"),
+                "Log message should contain the panic payload"
+            );
+
+            // 斷言 panic 的位置信息
+            let location = log_entry["fields"]["location"].as_str().unwrap();
+            assert!(
+                location.contains("src/infrastructure/web/handlers.rs"),
+                "Log should contain the correct panic location"
+            );
+
+            break; // 找到後即可退出循環
+        }
+    }
+
+    // 最終斷言，確保我們確實找到了目標日log
+    assert!(
+        panic_log_found,
+        "The detailed panic log (target='panic') was not found in the captured logs."
+    );
 }
 
 #[test]
@@ -144,7 +199,7 @@ fn unit_test_logging_module() {
 
     with_default(subscriber, || {
         let original_hook = panic::take_hook();
-        panic::set_hook(Box::new(axum_logging_service::telemetry::panic_hook));
+        panic::set_hook(Box::new(telemetry::panic_hook));
         let _ = panic::catch_unwind(|| {
             panic!("this is a unit test panic");
         });
@@ -203,11 +258,11 @@ fn unit_test_logging_module() {
     );
 }
 
-// 步驟 3: 將另一個 panic hook 測試也改為同步的 #[test]
 #[test]
 fn test_global_panic_hook_logs_from_tokio_task() {
-    // 步驟 3.1: 取得鎖
+    // 取得鎖以確保測試串行執行
     let _guard = TEST_MUTEX.lock().unwrap();
+
     let writer = TestWriter::new();
     let writer_for_closure = writer.clone();
     let subscriber = Registry::default().with(EnvFilter::new("trace")).with(
@@ -216,25 +271,80 @@ fn test_global_panic_hook_logs_from_tokio_task() {
             .with_writer(move || writer_for_closure.clone()),
     );
 
-    // 步驟 3.2: 建立自己的 runtime
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
 
-    // 步驟 3.3: 設定本地日誌，並在裡面執行 runtime
+    // 在 tracing subscriber 的上下文中執行異步代碼
     with_default(subscriber, || {
         rt.block_on(async {
-            std::panic::set_hook(Box::new(axum_logging_service::telemetry::panic_hook));
-            let task_handle = tokio::spawn(async {
+            // 設置自定義的 panic hook
+            std::panic::set_hook(Box::new(telemetry::panic_hook));
+
+            // 在一個新的 tokio 任務中直接觸發 panic
+            let task_handle = tokio::spawn(async move {
                 panic!("Panic from a detached tokio task for global hook test");
             });
+
+            // 等待任務完成。因為任務會 panic，所以這裡應該返回 Err
             let result = task_handle.await;
             assert!(result.is_err(), "Spawned task did not panic as expected.");
-            sleep(Duration::from_millis(100)).await;
+
+            // 稍作等待，確保日誌有時間被處理和寫入
+            sleep(Duration::from_millis(150)).await;
         });
     });
 
+    // 獲取所有日誌
     let logs = writer.get_logs();
-    assert!(logs.contains("PANIC_HOOK_ACTIVATED_SENTINEL_MESSAGE"));
+
+    // 添加調試輸出
+    if logs.is_empty() {
+        panic!("FAILED: No logs were captured!");
+    }
+    println!(
+        "--- CAPTURED LOGS (global_panic_hook) ---\n{}\n--- END LOGS ---",
+        logs
+    );
+
+    // 解析日誌並進行精確斷言
+    let mut panic_log_found = false;
+    for line in logs.lines().filter(|l| !l.is_empty()) {
+        let log_entry: Value = serde_json::from_str(line)
+            .unwrap_or_else(|e| panic!("Failed to parse log line as JSON: {}\nLine: {}", e, line));
+
+        // 尋找由 panic_hook 產生的日誌
+        if log_entry["target"] == "panic" {
+            panic_log_found = true;
+
+            assert_eq!(
+                log_entry["level"], "ERROR",
+                "Panic log level should be ERROR"
+            );
+
+            // 斷言 panic 的消息負載
+            let payload = log_entry["fields"]["payload"].as_str().unwrap();
+            assert!(
+                payload.contains("Panic from a detached tokio task for global hook test"),
+                "Log message should contain the correct panic payload"
+            );
+
+            // 斷言 panic 的位置信息
+            // 這次 panic 發生在測試文件自身
+            let location = log_entry["fields"]["location"].as_str().unwrap();
+            assert!(
+                location.contains("tests/integration_test.rs"),
+                "Log should contain the correct panic location (in the test file)"
+            );
+
+            break;
+        }
+    }
+
+    // 最終斷言
+    assert!(
+        panic_log_found,
+        "The detailed panic log (target='panic') was not found in the captured logs."
+    );
 }

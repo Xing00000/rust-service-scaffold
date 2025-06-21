@@ -1,6 +1,9 @@
-// This makes the logging module part of the library
+// src/lib.rs
+
+// 聲明 crate 的頂層模塊
 pub mod app;
+pub mod application;
+pub mod config;
+pub mod domain;
 pub mod error;
-pub mod handlers;
-pub mod logging;
-pub mod telemetry;
+pub mod infrastructure;
