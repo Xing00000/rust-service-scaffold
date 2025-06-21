@@ -11,7 +11,7 @@ otel_service_name = "my-rust-service"
 otel_exporter_otlp_endpoint = "http://localhost:4317"
 
 # Rate Limiting
-rate_limit_per_second = 100
+rate_limit_per_second = 1
 rate_limit_burst_size = 50
 
 # HTTP Headers

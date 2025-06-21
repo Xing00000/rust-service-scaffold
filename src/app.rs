@@ -9,12 +9,12 @@ use prometheus::Registry;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 use tower_http::{
     request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
     set_header::SetResponseHeaderLayer,
     trace::TraceLayer,
 };
-use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer, Quota};
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
@@ -67,17 +67,22 @@ impl Application {
         let untracked_routes = Router::new().route("/metrics", get(handlers::metrics_handler));
 
         // ✅ 將兩個 Router 合併，並應用最終的 state
-        let mut router = Router::new()
-            .merge(tracked_routes)
-            .merge(untracked_routes);
+        let mut router = Router::new().merge(tracked_routes).merge(untracked_routes);
 
         // Apply HTTP headers from config
         if let Some(headers_config) = &app_state.config.http_headers {
             for header_config in headers_config {
                 let header_name = HeaderName::from_bytes(header_config.name.as_bytes())
-                    .expect(&format!("Invalid header name in config: {}", header_config.name));
-                let header_value = HeaderValue::from_str(&header_config.value)
-                    .expect(&format!("Invalid header value for {}: {}", header_config.name, header_config.value));
+                    .unwrap_or_else(|_| {
+                        panic!("Invalid header name in config: {}", header_config.name)
+                    });
+                let header_value =
+                    HeaderValue::from_str(&header_config.value).unwrap_or_else(|_| {
+                        panic!(
+                            "Invalid header value for {}: {}",
+                            header_config.name, header_config.value
+                        )
+                    });
                 router = router.layer(SetResponseHeaderLayer::if_not_present(
                     header_name.clone(), // Clone since it's used in the error message too
                     header_value,

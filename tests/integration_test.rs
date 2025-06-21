@@ -364,6 +364,12 @@ async fn test_structured_error_response() {
         log_level: "info".to_string(),
         otel_exporter_otlp_endpoint: "http://localhost:4317".to_string(),
         otel_service_name: "test-service".to_string(),
+        rate_limit_per_second: 1,
+        rate_limit_burst_size: 50,
+        http_headers: Some(vec![axum_logging_service::config::HttpHeader {
+            name: "X-Test-Header".to_string(),
+            value: "TestValue".to_string(),
+        }]),
     });
     let registry = prometheus::Registry::new();
     let app_state = AppState {
@@ -425,7 +431,9 @@ async fn test_rate_limiting() {
     let app = Router::new()
         .route("/", get(|| async { "Hello, world!" }))
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid)) // Ensure RequestId is available if Governor uses it
-        .layer(GovernorLayer { config: governor_conf });
+        .layer(GovernorLayer {
+            config: governor_conf,
+        });
 
     use axum::extract::connect_info::ConnectInfo;
     use std::net::SocketAddr;
