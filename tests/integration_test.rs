@@ -365,6 +365,7 @@ async fn test_structured_error_response() {
         otel_exporter_otlp_endpoint: "http://localhost:4317".to_string(),
         otel_service_name: "test-service".to_string(),
     });
+
     let app_state = AppState {
         config: test_config,
     };

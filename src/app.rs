@@ -3,6 +3,9 @@ use crate::config::Config;
 use crate::infrastructure::telemetry;
 use crate::infrastructure::web::handlers;
 use axum::{routing::get, Router};
+use axum_prometheus::PrometheusMetricLayer;
+use prometheus::Registry;
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -10,7 +13,6 @@ use tower_http::{
     request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
     trace::TraceLayer,
 };
-
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
@@ -23,11 +25,25 @@ pub struct Application {
 
 impl Application {
     pub async fn build(config: Config) -> Result<Self, Box<dyn std::error::Error>> {
-        telemetry::init_telemetry(&config)
+        // ✅ 步驟 1: 首先創建 Registry，作為所有指標的中心。
+        let registry = Registry::new();
+
+        // ✅ 步驟 2: 將 Registry 的克隆注入給 OTel exporter。
+        let exporter = opentelemetry_prometheus::exporter()
+            .with_registry(registry.clone()) // 使用 clone
+            .build()?;
+
+        // 初始化遙測，傳入已經配置好的 exporter
+        telemetry::init_telemetry(&config, exporter)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
+        // ✅ 步驟 3: 使用 with_registry 構造器將 Registry 注入給 axum-prometheus。
+        let (prometheus_layer, metrics_handle) = PrometheusMetricLayer::pair(); // 使用 clone
+
+        // 設置全局 panic hook
         std::panic::set_hook(Box::new(telemetry::panic_hook));
 
+        // ✅ 步驟 4: 將原始的 Registry 存儲到 AppState 中。
         let app_state = AppState {
             config: Arc::new(config.clone()),
         };
@@ -36,8 +52,16 @@ impl Application {
             .route("/", get(handlers::main_handler))
             .route("/test_error", get(handlers::test_error_handler))
             .route("/test_panic", get(handlers::panic_handler))
-            .layer(PropagateRequestIdLayer::x_request_id())
+            .route("/healthz/live", get(handlers::live_handler))
+            .route("/healthz/ready", get(handlers::ready_handler))
+            .route(
+                "/metrics",
+                get(move || async move { metrics_handle.render() }),
+            )
+            .route("/info", get(handlers::info_handler))
             .layer(TraceLayer::new_for_http())
+            .layer(prometheus_layer)
+            .layer(PropagateRequestIdLayer::x_request_id())
             .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
             .with_state(app_state);
 
@@ -48,7 +72,6 @@ impl Application {
         Ok(Application { router, listener })
     }
 
-    // ✅ [關鍵修改] 更新 run_until_stopped 方法以支持優雅關閉
     pub async fn run_until_stopped(self) -> Result<(), std::io::Error> {
         tracing::info!("Application started. Press Ctrl+C to shut down.");
         axum::serve(self.listener, self.router.into_make_service())
