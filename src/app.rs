@@ -48,7 +48,44 @@ impl Application {
         Ok(Application { router, listener })
     }
 
+    // ✅ [關鍵修改] 更新 run_until_stopped 方法以支持優雅關閉
     pub async fn run_until_stopped(self) -> Result<(), std::io::Error> {
-        axum::serve(self.listener, self.router.into_make_service()).await
+        tracing::info!("Application started. Press Ctrl+C to shut down.");
+        axum::serve(self.listener, self.router.into_make_service())
+            .with_graceful_shutdown(shutdown_signal())
+            .await
     }
+}
+
+// ✅ [關鍵新增] 添加一個異步函數來監聽操作系統的關閉信號
+async fn shutdown_signal() {
+    // 創建一個 Future 來處理 Ctrl+C 信號
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    // 僅在 Unix 系統上創建一個 Future 來處理 TERM 信號
+    // Kubernetes 等容器編排平台會發送 SIGTERM 來終止 Pod
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    // 在 Windows 上，我們只等待 Ctrl+C
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    // 使用 tokio::select! 宏來等待任何一個信號
+    // `tokio::select!` 會在第一個完成的 Future 上停止等待，並取消其他的 Future
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    tracing::warn!("Signal received, starting graceful shutdown...");
 }
