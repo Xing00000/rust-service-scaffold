@@ -4,7 +4,6 @@ use crate::infrastructure::telemetry;
 use crate::infrastructure::web::handlers;
 use axum::{routing::get, Router};
 use axum_prometheus::PrometheusMetricLayer;
-use prometheus::Registry;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -25,25 +24,14 @@ pub struct Application {
 
 impl Application {
     pub async fn build(config: Config) -> Result<Self, Box<dyn std::error::Error>> {
-        // ✅ 步驟 1: 首先創建 Registry，作為所有指標的中心。
-        let registry = Registry::new();
-
-        // ✅ 步驟 2: 將 Registry 的克隆注入給 OTel exporter。
-        let exporter = opentelemetry_prometheus::exporter()
-            .with_registry(registry.clone()) // 使用 clone
-            .build()?;
-
-        // 初始化遙測，傳入已經配置好的 exporter
-        telemetry::init_telemetry(&config, exporter)
+        telemetry::init_telemetry(&config)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
-        // ✅ 步驟 3: 使用 with_registry 構造器將 Registry 注入給 axum-prometheus。
-        let (prometheus_layer, metrics_handle) = PrometheusMetricLayer::pair(); // 使用 clone
+        // ✅ [核心修正] 使用 .pair() 來創建 Layer 和 Handle
+        let (prometheus_layer, metrics_handle) = PrometheusMetricLayer::pair();
 
-        // 設置全局 panic hook
         std::panic::set_hook(Box::new(telemetry::panic_hook));
 
-        // ✅ 步驟 4: 將原始的 Registry 存儲到 AppState 中。
         let app_state = AppState {
             config: Arc::new(config.clone()),
         };
@@ -54,13 +42,11 @@ impl Application {
             .route("/test_panic", get(handlers::panic_handler))
             .route("/healthz/live", get(handlers::live_handler))
             .route("/healthz/ready", get(handlers::ready_handler))
-            .route(
-                "/metrics",
-                get(move || async move { metrics_handle.render() }),
-            )
             .route("/info", get(handlers::info_handler))
+            // ✅ [核心修正] 直接使用 handle 來渲染指標
+            .route("/metrics", get(|| async move { metrics_handle.render() }))
             .layer(TraceLayer::new_for_http())
-            .layer(prometheus_layer)
+            .layer(prometheus_layer) // <-- 使用這裡創建的 layer
             .layer(PropagateRequestIdLayer::x_request_id())
             .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
             .with_state(app_state);

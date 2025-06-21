@@ -126,3 +126,8 @@ You can use Docker Compose to easily run Jaeger and Prometheus locally.
     tracing::info!("This log message is part of the custom_work_in_handler span.");
     ```
 -   **Custom Metrics**: While not extensively demonstrated in the current template, custom metrics (e.g., business-specific counters, gauges, histograms) can be created using the OpenTelemetry Metrics API (`opentelemetry::metrics`). You would typically obtain a `Meter` from the global `MeterProvider` (which was initialized in `main.rs`) and use it to create and record metric instruments. Refer to the `opentelemetry` crate documentation for details on creating custom metrics.
+find . -path ./target -prune -o -type f -name "*.rs" -print | while read file; do
+  echo "=== $file ===" >> all_code.txt
+  cat "$file" >> all_code.txt
+  echo -e "\n" >> all_code.txt
+done

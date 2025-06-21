@@ -9,8 +9,7 @@ use opentelemetry::{
     KeyValue,
 };
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_prometheus::PrometheusExporter;
-use opentelemetry_sdk::{metrics::SdkMeterProvider, trace::SdkTracerProvider, Resource};
+use opentelemetry_sdk::{trace::SdkTracerProvider, Resource};
 use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
 use std::panic::PanicHookInfo;
 use tracing::info;
@@ -86,7 +85,7 @@ pub fn panic_hook(panic_info: &PanicHookInfo) {
 /// 完整的遙測初始化流程
 pub fn init_telemetry(
     config: &Config,
-    prometheus_exporter: PrometheusExporter,
+    // prometheus_exporter: PrometheusExporter,
 ) -> Result<(), InfrastructureError> {
     // ✅ [關鍵修正] 使用 Resource::builder() 來創建 Resource
     // 這是新版 SDK 中穩定且公開的 API
@@ -98,11 +97,11 @@ pub fn init_telemetry(
         .build();
 
     // 初始化指標系統
-    let meter_provider = SdkMeterProvider::builder()
-        .with_resource(resource.clone()) // resource 可以被克隆
-        .with_reader(prometheus_exporter)
-        .build();
-    global::set_meter_provider(meter_provider);
+    // let meter_provider = SdkMeterProvider::builder()
+    //     .with_resource(resource.clone()) // resource 可以被克隆
+    //     .with_reader(prometheus_exporter)
+    //     .build();
+    // global::set_meter_provider(meter_provider);
 
     // 初始化追踪系統
     let tracer_provider = init_tracer_provider(config, resource)
