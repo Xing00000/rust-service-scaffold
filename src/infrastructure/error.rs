@@ -7,6 +7,8 @@ use thiserror::Error;
 pub enum InfrastructureError {
     #[error("Telemetry initialization failed: {0}")]
     TelemetryInit(String),
+    #[error("Telemetry (Metrics) initialization failed: {0}")]
+    MetricsInit(String),
     // #[error("Database connection failed")]
     // DatabaseConnection(#[from] sqlx::Error), // 示例，需要添加 sqlx 依賴
 }

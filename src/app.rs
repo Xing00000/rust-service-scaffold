@@ -1,9 +1,9 @@
 // src/app.rs
-use crate::config::Config;
 use crate::infrastructure::telemetry;
 use crate::infrastructure::web::handlers;
-use axum::{routing::get, Router};
-use axum_prometheus::PrometheusMetricLayer;
+use crate::{config::Config, infrastructure::web::metrics};
+use axum::{middleware, routing::get, Router};
+use prometheus::Registry;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -15,6 +15,7 @@ use tower_http::{
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
+    pub registry: Arc<Registry>,
 }
 
 pub struct Application {
@@ -24,31 +25,34 @@ pub struct Application {
 
 impl Application {
     pub async fn build(config: Config) -> Result<Self, Box<dyn std::error::Error>> {
-        telemetry::init_telemetry(&config)
+        let registry = telemetry::init_telemetry(&config)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
-
-        // ✅ [核心修正] 使用 .pair() 來創建 Layer 和 Handle
-        let (prometheus_layer, metrics_handle) = PrometheusMetricLayer::pair();
 
         std::panic::set_hook(Box::new(telemetry::panic_hook));
 
         let app_state = AppState {
             config: Arc::new(config.clone()),
+            registry: Arc::new(registry),
         };
 
-        let router = Router::new()
+        let tracked_routes = Router::new()
             .route("/", get(handlers::main_handler))
             .route("/test_error", get(handlers::test_error_handler))
             .route("/test_panic", get(handlers::panic_handler))
             .route("/healthz/live", get(handlers::live_handler))
             .route("/healthz/ready", get(handlers::ready_handler))
             .route("/info", get(handlers::info_handler))
-            // ✅ [核心修正] 直接使用 handle 來渲染指標
-            .route("/metrics", get(|| async move { metrics_handle.render() }))
+            .layer(middleware::from_fn(metrics::track_metrics))
             .layer(TraceLayer::new_for_http())
-            .layer(prometheus_layer) // <-- 使用這裡創建的 layer
             .layer(PropagateRequestIdLayer::x_request_id())
-            .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+            .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid));
+
+        let untracked_routes = Router::new().route("/metrics", get(handlers::metrics_handler));
+
+        // ✅ 將兩個 Router 合併，並應用最終的 state
+        let router = Router::new()
+            .merge(tracked_routes)
+            .merge(untracked_routes)
             .with_state(app_state);
 
         let addr = SocketAddr::from(([127, 0, 0, 1], config.port));

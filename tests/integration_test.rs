@@ -365,9 +365,10 @@ async fn test_structured_error_response() {
         otel_exporter_otlp_endpoint: "http://localhost:4317".to_string(),
         otel_service_name: "test-service".to_string(),
     });
-
+    let registry = prometheus::Registry::new();
     let app_state = AppState {
         config: test_config,
+        registry: Arc::new(registry),
     };
 
     // ✅ 修正: 複製 main application 的 middleware stack

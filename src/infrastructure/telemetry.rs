@@ -9,7 +9,7 @@ use opentelemetry::{
     KeyValue,
 };
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{trace::SdkTracerProvider, Resource};
+use opentelemetry_sdk::{metrics::SdkMeterProvider, trace::SdkTracerProvider, Resource};
 use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
 use std::panic::PanicHookInfo;
 use tracing::info;
@@ -83,12 +83,7 @@ pub fn panic_hook(panic_info: &PanicHookInfo) {
 }
 
 /// 完整的遙測初始化流程
-pub fn init_telemetry(
-    config: &Config,
-    // prometheus_exporter: PrometheusExporter,
-) -> Result<(), InfrastructureError> {
-    // ✅ [關鍵修正] 使用 Resource::builder() 來創建 Resource
-    // 這是新版 SDK 中穩定且公開的 API
+pub fn init_telemetry(config: &Config) -> Result<prometheus::Registry, InfrastructureError> {
     let resource = Resource::builder()
         .with_attributes(vec![KeyValue::new(
             SERVICE_NAME,
@@ -96,12 +91,24 @@ pub fn init_telemetry(
         )])
         .build();
 
+    let registry = prometheus::Registry::new();
+
+    // --- 初始化指標系統 (使用 opentelemetry-prometheus) ---
+    // 1. 創建 Prometheus 導出器
+    let prometheus_exporter = opentelemetry_prometheus::exporter()
+        .with_registry(registry.clone()) // <- 使用新的 Registry
+        .build()
+        .map_err(|e| InfrastructureError::MetricsInit(e.to_string()))?;
+
     // 初始化指標系統
-    // let meter_provider = SdkMeterProvider::builder()
-    //     .with_resource(resource.clone()) // resource 可以被克隆
-    //     .with_reader(prometheus_exporter)
-    //     .build();
-    // global::set_meter_provider(meter_provider);
+    let meter_provider = SdkMeterProvider::builder()
+        .with_resource(resource.clone()) // resource 可以被克隆
+        .with_reader(prometheus_exporter)
+        .build();
+
+    global::set_meter_provider(meter_provider);
+
+    info!("Metrics system (Prometheus exporter) initialized.");
 
     // 初始化追踪系統
     let tracer_provider = init_tracer_provider(config, resource)
@@ -111,5 +118,5 @@ pub fn init_telemetry(
     init_subscriber(config, tracer_provider);
 
     info!("Telemetry initialized successfully.");
-    Ok(())
+    Ok(registry)
 }

@@ -9,6 +9,7 @@ use axum::{
     response::IntoResponse,
     Extension,
 };
+use prometheus::{Encoder, TextEncoder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tower_http::request_id::RequestId;
@@ -96,4 +97,26 @@ pub async fn info_handler() -> Json<BuildInfo> {
 pub async fn panic_handler() -> Result<impl IntoResponse, AppError> {
     panic!("This is a test panic deliberately triggered from the /test_panic route!");
     Ok("This response will never be sent.")
+}
+
+pub async fn metrics_handler(State(app_state): State<AppState>) -> impl IntoResponse {
+    // ✅ 不再需要 State
+    let mut buffer = Vec::new();
+    let encoder = TextEncoder::new();
+
+    if let Err(e) = encoder.encode(&app_state.registry.gather(), &mut buffer) {
+        tracing::error!("Failed to encode prometheus metrics: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to encode metrics: {}", e),
+        )
+            .into_response()
+    } else {
+        (
+            StatusCode::OK,
+            [("Content-Type", prometheus::TEXT_FORMAT)],
+            buffer,
+        )
+            .into_response()
+    }
 }

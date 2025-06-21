@@ -3,3 +3,4 @@
 
 pub mod handlers;
 // pub mod middleware; // 為未來的中間件預留
+pub mod metrics;
