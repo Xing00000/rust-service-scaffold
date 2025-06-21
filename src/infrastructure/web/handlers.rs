@@ -32,8 +32,11 @@ pub async fn main_handler(
     );
 
     if params.make_error.unwrap_or(false) {
-        tracing::warn!(request_id = %request_id, "Simulating a bad request error.");
-        return Err(AppError::BadRequest(
+        tracing::warn!(request_id = %request_id, "Simulating a validation error.");
+
+        // ✅ [關鍵修正]: 確保此處返回的是 `AppError::Validation`
+        // 這將在 `IntoResponse` 中被正確地映射為 HTTP 422。
+        return Err(AppError::Validation(
             "User triggered a bad request".to_string(),
         ));
     }
@@ -42,22 +45,14 @@ pub async fn main_handler(
     Ok(format!("Hello, World! Your Request ID is: {}", request_id))
 }
 
+// 這個 handler 返回 `AppError::Internal`，對應 HTTP 500。
 pub async fn test_error_handler() -> Result<&'static str, AppError> {
-    Err(AppError::InternalServerError)
+    Err(AppError::Internal)
 }
 
-/// 觸發 panic 的處理函數，對應 `/test_panic` 端點。
-///
-/// 這個函數故意觸發一個 panic，用於測試全局 panic hook 是否能
-/// 捕獲 panic、記錄詳細信息並優雅地終止進程。
-///
-/// 我們使用 `#[allow(unreachable_code)]` 來抑制編譯器關於 panic! 之後
-/// 代碼不可達的警告，並返回一個 Result 以符合未來的 Rust 版本要求。
+/// 觸發 panic 的處理函數。
 #[allow(unreachable_code)]
 pub async fn panic_handler() -> Result<impl IntoResponse, AppError> {
     panic!("This is a test panic deliberately triggered from the /test_panic route!");
-
-    // 這段代碼實際上永遠不會被執行，但它的存在是為了滿足類型簽名，
-    // 從而解決 Rust 2024 中關於 "never type fallback" 的編譯問題。
     Ok("This response will never be sent.")
 }

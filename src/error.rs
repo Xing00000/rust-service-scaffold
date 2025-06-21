@@ -1,55 +1,66 @@
 // src/error.rs
-use crate::domain::error::DomainError;
-use crate::infrastructure::error::InfrastructureError;
-use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
-use serde_json::json;
+//! 全域錯誤與結構化 HTTP 響應
+use axum::{http::StatusCode, response::IntoResponse, Json};
+use serde::Serialize;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+/// ========= 領域層（Domain）錯誤 =========
+pub use crate::domain::error::DomainError;
+/// ========= 基礎設施（Infrastructure）錯誤 =========
+pub use crate::infrastructure::error::InfrastructureError;
+
+/// ========= 應用層統一錯誤 =========
+#[derive(Debug, Error)]
 pub enum AppError {
-    #[error("Bad Request: {0}")]
-    BadRequest(String),
-
-    #[error("Internal Server Error")]
-    InternalServerError,
-
-    #[error(transparent)]
+    // ... 保持不變
+    #[error("{0}")]
     Domain(#[from] DomainError),
-
-    #[error(transparent)]
+    #[error("{0}")]
     Infrastructure(#[from] InfrastructureError),
+    #[error("Validation error: {0}")]
+    Validation(String),
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+    #[error("Resource not found: {resource}")]
+    NotFound { resource: String },
+    #[error("Unexpected internal error")]
+    Internal,
+}
+
+/// ========= 結構化錯誤載體 =========
+#[derive(Serialize)]
+struct ErrorBody<'a> {
+    code: &'a str,
+    message: String,
+}
+
+#[derive(Serialize)]
+struct ErrorResponse<'a> {
+    error: ErrorBody<'a>,
 }
 
 impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        let (status, error_message) = match &self {
-            // ✅ 修正: 借用 self
-            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
-            AppError::InternalServerError => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "An internal server error occurred".to_string(),
-            ),
-            // ✅ 修正: 使用 ref 借用 msg，避免移動
-            AppError::Domain(DomainError::ValidationError(ref msg)) => {
-                (StatusCode::UNPROCESSABLE_ENTITY, msg.clone())
-            }
-            AppError::Infrastructure(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "An internal server error occurred".to_string(),
-            ),
+    fn into_response(self) -> axum::response::Response {
+        tracing::error!(error.details = ?self, "Request resulted in an error");
+
+        // 將 enum variant 映射到 HTTP 狀態碼與錯誤碼字串
+        let (status, code) = match &self {
+            AppError::Domain(_) => (StatusCode::BAD_REQUEST, "DOMAIN_ERROR"),
+            AppError::Infrastructure(_) => (StatusCode::BAD_GATEWAY, "INFRA_ERROR"),
+            AppError::Validation(_) => (StatusCode::UNPROCESSABLE_ENTITY, "VALIDATION"),
+            AppError::Unauthorized(_) => (StatusCode::UNAUTHORIZED, "UNAUTHORIZED"),
+            AppError::NotFound { .. } => (StatusCode::NOT_FOUND, "NOT_FOUND"),
+            AppError::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL"),
         };
 
-        // ✅ 修正: 現在 self 沒有被移動，可以安全地借用
-        tracing::error!(error = ?self, "Request failed");
+        // ✅ 修正: 構建嵌套的 body 結構
+        let body = ErrorResponse {
+            error: ErrorBody {
+                code,
+                message: self.to_string(),
+            },
+        };
 
-        let body = Json(json!({
-            "error": error_message,
-        }));
-
-        (status, body).into_response()
+        (status, Json(body)).into_response()
     }
 }

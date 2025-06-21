@@ -7,13 +7,20 @@ use std::{
 };
 use tokio::time::{sleep, Duration};
 use tower::ServiceExt;
-use tower_http::{request_id::RequestId, trace::TraceLayer};
+use tower_http::{
+    request_id::{MakeRequestUuid, PropagateRequestIdLayer, RequestId, SetRequestIdLayer},
+    trace::TraceLayer,
+};
 use tracing::subscriber::with_default;
 use tracing_futures::WithSubscriber;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
 // 步驟 1 & 2: 重新引入 Mutex 來序列化 panic hook 測試
+use axum::body::{to_bytes, Body};
+use axum_logging_service::app::AppState;
+use axum_logging_service::config::Config;
+// ✅ 修正: 從 hyper use 語句中移除 Body
+use hyper::{Request, StatusCode};
 use once_cell::sync::Lazy;
-
 static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 #[derive(Clone, Default)]
@@ -346,5 +353,53 @@ fn test_global_panic_hook_logs_from_tokio_task() {
     assert!(
         panic_log_found,
         "The detailed panic log (target='panic') was not found in the captured logs."
+    );
+}
+
+#[tokio::test]
+async fn test_structured_error_response() {
+    // Arrange
+    let test_config = Arc::new(Config {
+        port: 8080,
+        log_level: "info".to_string(),
+        otel_exporter_otlp_endpoint: "http://localhost:4317".to_string(),
+        otel_service_name: "test-service".to_string(),
+    });
+    let app_state = AppState {
+        config: test_config,
+    };
+
+    // ✅ 修正: 複製 main application 的 middleware stack
+    // 這樣可以確保 `RequestId` extension 在 handler 中可用。
+    let app = Router::new()
+        .route("/", get(handlers::main_handler))
+        .layer(PropagateRequestIdLayer::x_request_id())
+        .layer(TraceLayer::new_for_http())
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+        .with_state(app_state);
+
+    // Act
+    let request = Request::builder()
+        .uri("/?make_error=true")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+
+    // Assert
+    // 現在這個斷言應該會成功，因為 handler 會被正確執行並返回 AppError::Validation
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    // ✅ 修正: 為 `to_bytes` 函數提供一個合理的 body 大小限制（例如 64KB）。
+    const BODY_LIMIT: usize = 65_536; // 64KB
+    let body_bytes = to_bytes(response.into_body(), BODY_LIMIT).await.unwrap();
+
+    let body_json: Value =
+        serde_json::from_slice(&body_bytes).expect("Response body should be valid JSON");
+
+    assert_eq!(body_json["error"]["code"], "VALIDATION");
+    assert_eq!(
+        body_json["error"]["message"],
+        "Validation error: User triggered a bad request"
     );
 }
