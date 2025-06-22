@@ -14,6 +14,9 @@ otel_exporter_otlp_endpoint = "http://localhost:4317"
 rate_limit_per_second = 1
 rate_limit_burst_size = 50
 
+# Secret used for signing JWT tokens
+jwt_secret = "change-me"
+
 # HTTP Headers
 # You can define a list of HTTP headers to be added to every response.
 # These are applied if the header is not already present in the response.

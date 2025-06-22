@@ -38,6 +38,9 @@ pub struct Config {
     pub rate_limit_burst_size: u32,
 
     pub http_headers: Option<Vec<HttpHeader>>,
+
+    #[validate(length(min = 1))]
+    pub jwt_secret: String,
 }
 
 impl Config {
