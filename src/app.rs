@@ -65,24 +65,7 @@ impl Application {
             .layer(GovernorLayer {
                 config: governor_config,
             })
-            // Add our new auth_middleware
-            // Note: The auth_middleware needs to be adapted if it doesn't match `from_fn`'s expected signature directly.
-            // Our current auth_middleware expects HeaderMap, Request, Next.
-            // `from_fn` expects a function that takes Request, Next.
-            // We'll need a wrapper or to adjust auth_middleware.
-            // For now, let's assume a wrapper `auth_middleware_wrapper` similar to tests or adjust it.
-            // Let's create a simple inline wrapper for now, or adjust auth_middleware to fit.
-            // Simpler: adjust auth_middleware or use from_fn_with_state if state is needed early.
-            // Given auth_middleware's current signature: `async fn auth_middleware(headers: HeaderMap, request: Request, next: Next)`
-            // it's not directly compatible with `middleware::from_fn`.
-            // Let's use `middleware::from_fn_with_state` if we needed AppState in middleware,
-            // or a simple wrapper.
-            // The simplest way is to modify auth_middleware to take `Request, Next` and extract headers inside.
-            // Let's go back and modify `auth.rs` for this.
-            // For now, I will add it assuming it's compatible or will be made compatible.
-            // This highlights a potential refinement for auth.rs or the need for a wrapper here.
-            // Let's assume we will adjust auth_middleware to be: `async fn auth_middleware(request: Request, next: Next)`
-            .layer(middleware::from_fn(auth_middleware)); // This now expects auth_middleware to have the compatible signature
+            .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
 
         let untracked_routes = Router::new().route("/metrics", get(handlers::metrics_handler));
 

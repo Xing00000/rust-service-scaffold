@@ -370,6 +370,7 @@ async fn test_structured_error_response() {
             name: "X-Test-Header".to_string(),
             value: "TestValue".to_string(),
         }]),
+        jwt_secret: "testsecret".to_string(),
     });
     let registry = prometheus::Registry::new();
     let app_state = AppState {
