@@ -21,11 +21,15 @@ use tracing::subscriber::with_default;
 use tracing_futures::WithSubscriber;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
 // 步驟 1 & 2: 重新引入 Mutex 來序列化 panic hook 測試
+use application::ports::RepoError;
 use axum::body::{to_bytes, Body};
-
 // ✅ 修正: 從 hyper use 語句中移除 Body
+use application::ports::User;
+use application::ports::UserRepository;
+use async_trait::async_trait;
 use hyper::{Request, StatusCode};
 use once_cell::sync::Lazy;
+use uuid::Uuid;
 static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 #[derive(Clone, Default)]
@@ -361,6 +365,23 @@ fn test_global_panic_hook_logs_from_tokio_task() {
     );
 }
 
+// 實作一個測試專用 fake/mock struct
+#[derive(Default)]
+pub struct FakeUserRepository;
+#[async_trait]
+impl UserRepository for FakeUserRepository {
+    async fn find(&self, id: &Uuid) -> Result<User, RepoError> {
+        // fake 行為
+        Ok(User {
+            id: *id,
+            name: "Test".to_string(),
+        })
+    }
+    async fn save(&self, _user: &User) -> Result<(), RepoError> {
+        Ok(())
+    }
+}
+
 #[tokio::test]
 async fn test_structured_error_response() {
     // Arrange
@@ -375,11 +396,15 @@ async fn test_structured_error_response() {
             name: "X-Test-Header".to_string(),
             value: "TestValue".to_string(),
         }]),
+        database_url: "postgres://user:password@localhost/test_db".to_string(),
+        db_max_conn: 10,
     });
     let registry = prometheus::Registry::new();
+    let mock_repo = Arc::new(FakeUserRepository::default());
     let app_state = AppState {
-        config: test_config,
+        config: test_config.clone(),
         registry: Arc::new(registry),
+        user_repo: mock_repo,
     };
 
     // ✅ 修正: 複製 main application 的 middleware stack

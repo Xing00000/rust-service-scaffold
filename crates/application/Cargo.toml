@@ -15,7 +15,7 @@ domain = { path = "../domain" }
 
 
 # 用於異步 trait，使我們可以在 trait 方法中使用 async
-# async-trait = { workspace = true } # 使用最新的穩定版本
+async-trait = { workspace = true } # 使用最新的穩定版本
 
 # 錯誤處理庫，用於定義應用層的錯誤
 thiserror = { workspace = true }
@@ -23,5 +23,9 @@ thiserror = { workspace = true }
 # 用於 DTOs 的驗證，如果你的 application/dto.rs 中有使用
 validator = { workspace = true } # 使用最新的穩定版本，並啟用 derive 功能
 
+uuid = { workspace = true }
 # 可選：如果應用層有需要日誌，這裡可以使用 tracing 門面，但不要包含 tracing-subscriber
 # tracing = "0.1.40"
+
+[dev-dependencies]
+mockall = { workspace = true }

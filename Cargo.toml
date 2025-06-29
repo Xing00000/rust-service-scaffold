@@ -29,7 +29,7 @@ members = [
     # "crates/infra_cache_redis", 
 
     # --- Presentation Layer ---
-    "presentation/pres_web_axum", "crates/contracts",
+    "presentation/pres_web_axum", "crates/contracts", "crates/infra_db_postgres",
 ]
 
 # Default package metadata that can be inherited by member crates.
@@ -58,7 +58,9 @@ hyper = { version = "1.6.0", features = ["full"] }
 tower = "0.4.13" # Note: Only `util` feature is for dev, but `tower` itself is used more broadly
 tower-http = { version = "0.5.2", features = ["set-header", "request-id", "trace", "fs"] }
 tower_governor = "0.7.0"
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "macros"] }
 
+async-trait = "0.1"
 # --- Async Runtime ---
 tokio = { version = "1", features = ["full"] } # `macros` and `rt-multi-thread` can be specific to dev-dependencies if needed
 
@@ -97,7 +99,7 @@ uuid = { version = "1.8.0", features = ["v7", "fast-rng"] }
 reqwest = { version = "0.12.20", features = ["json"] }
 tracing-futures = "0.2"
 vergen = { version = "8", features = ["build", "git", "gitcl"] }
-
+mockall = "0.12"
 # ===================================================================
 #                    Build Profiles
 # ===================================================================
@@ -108,6 +110,7 @@ opt-level = 0
 debug = true
 split-debuginfo = "packed" # Faster linking on some platforms
 rpath = false
+
 
 # Release profile (used for `cargo build --release`)
 [profile.release]

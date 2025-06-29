@@ -11,6 +11,7 @@ repository = "https://github.com/your-username/axum_hexagonal_template"
 # 標準 library crate
 
 [dependencies]
+axum = { workspace = true }
 # --- Telemetry 與 Logging ---
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

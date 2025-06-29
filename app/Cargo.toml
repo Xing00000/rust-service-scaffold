@@ -11,7 +11,7 @@ license = "MIT OR Apache-2.0"
 contracts = { path = "../crates/contracts" }
 domain = { path = "../crates/domain" }
 application = { path = "../crates/application" }
-# infra_db_postgres = { path = "../crates/infra_db_postgres" } # 如啟用可取消註解
+infra_db_postgres = { path = "../crates/infra_db_postgres" }
 infra_telemetry = { path = "../crates/infra_telemetry" }
 pres_web_axum = { path = "../presentation/pres_web_axum" }
 
@@ -57,6 +57,7 @@ tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
 reqwest = { workspace = true }
 tower = { version = "0.4.13", features = ["util"] }
+async-trait = { workspace = true } 
 
 [build-dependencies]
 vergen = { workspace = true }

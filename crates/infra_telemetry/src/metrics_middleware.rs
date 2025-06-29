@@ -1,9 +1,14 @@
-use axum::body::Body;
-use axum::Extension;
-use axum::{extract::MatchedPath, http::Request, middleware::Next, response::IntoResponse};
-use infra_telemetry::metrics::Metrics;
 use std::sync::Arc;
-use std::time::Instant; // <-- 只用 trait，不知道 axum 細節
+use std::time::Instant;
+
+use axum::body::Body;
+use axum::extract::MatchedPath;
+use axum::http::Request;
+use axum::middleware::Next;
+use axum::response::IntoResponse;
+use axum::Extension;
+
+use crate::metrics::Metrics; // <-- 只用 trait，不知道 axum 細節
 
 // 把 Metrics 傳進來 (可透過 extension or app_state)
 pub async fn axum_metrics_middleware(

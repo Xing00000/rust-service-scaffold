@@ -39,6 +39,12 @@ pub struct Config {
     pub rate_limit_burst_size: u32,
 
     pub http_headers: Option<Vec<HttpHeader>>,
+
+    #[validate(length(min = 1))]
+    pub database_url: String,
+
+    #[validate(range(min = 1))]
+    pub db_max_conn: u32,
 }
 
 impl Config {

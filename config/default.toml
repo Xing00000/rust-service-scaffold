@@ -14,6 +14,10 @@ otel_exporter_otlp_endpoint = "http://localhost:4317"
 rate_limit_per_second = 1
 rate_limit_burst_size = 50
 
+# Database Configuration
+database_url = "postgres://myuser:mypassword@localhost:5432/mydb"
+db_max_conn = 5
+
 # HTTP Headers
 # You can define a list of HTTP headers to be added to every response.
 # These are applied if the header is not already present in the response.

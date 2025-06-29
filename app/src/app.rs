@@ -2,8 +2,9 @@ use crate::config::Config;
 use crate::state::AppState;
 use axum::{middleware, routing::get, Router};
 use hyper::header::{HeaderName, HeaderValue};
-use infra_telemetry::{config::TelemetryConfig, metrics::Metrics, telemetry};
-use pres_web_axum::{handlers, metrics_middleware};
+use infra_db_postgres::user_repo::PostgresUserRepository;
+use infra_telemetry::{config::TelemetryConfig, metrics::Metrics, metrics_layer, telemetry};
+use pres_web_axum::handlers;
 use tower::ServiceBuilder;
 
 use std::net::SocketAddr;
@@ -33,10 +34,13 @@ impl Application {
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
         std::panic::set_hook(Box::new(telemetry::panic_hook));
+        let user_repo =
+            PostgresUserRepository::new(&config.database_url, config.db_max_conn).await?;
 
         let app_state = AppState {
             config: Arc::new(config.clone()), // Clone config for app_state
             registry: Arc::new(registry),
+            user_repo: Arc::new(user_repo),
         };
 
         // Configure Governor for rate limiting using values from Config
@@ -50,9 +54,7 @@ impl Application {
         let metrics = Arc::new(Metrics::new());
         let common_layers = ServiceBuilder::new()
             .layer(axum::extract::Extension(metrics.clone())) // 最外層
-            .layer(middleware::from_fn(
-                metrics_middleware::axum_metrics_middleware,
-            ))
+            .layer(middleware::from_fn(metrics_layer))
             .layer(TraceLayer::new_for_http())
             .layer(PropagateRequestIdLayer::x_request_id())
             .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
