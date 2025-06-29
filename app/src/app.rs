@@ -1,10 +1,10 @@
-// src/app.rs
-use crate::infrastructure::telemetry;
-use crate::infrastructure::web::handlers;
-use crate::{config::Config, infrastructure::web::metrics};
+use crate::config::Config;
+use crate::state::AppState;
 use axum::{middleware, routing::get, Router};
 use hyper::header::{HeaderName, HeaderValue};
-use prometheus::Registry;
+use infra_telemetry::{config::TelemetryConfig, metrics::Metrics, telemetry};
+use pres_web_axum::{handlers, metrics_middleware};
+use tower::ServiceBuilder;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -15,11 +15,6 @@ use tower_http::{
     set_header::SetResponseHeaderLayer,
     trace::TraceLayer,
 };
-#[derive(Clone)]
-pub struct AppState {
-    pub config: Arc<Config>,
-    pub registry: Arc<Registry>,
-}
 
 pub struct Application {
     router: Router,
@@ -28,7 +23,13 @@ pub struct Application {
 
 impl Application {
     pub async fn build(config: Config) -> Result<Self, Box<dyn std::error::Error>> {
-        let registry = telemetry::init_telemetry(&config)
+        let telemetry_cfg: TelemetryConfig = TelemetryConfig {
+            otel_service_name: config.otel_service_name.clone(),
+            otel_exporter_otlp_endpoint: config.otel_exporter_otlp_endpoint.clone(),
+            prometheus_path: "/metrics".to_string(),
+            log_level: config.log_level.clone(),
+        };
+        let registry = telemetry::init_telemetry(&telemetry_cfg)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
         std::panic::set_hook(Box::new(telemetry::panic_hook));
@@ -46,28 +47,35 @@ impl Application {
                 .finish()
                 .unwrap(),
         );
-
-        let tracked_routes = Router::new()
-            .route("/", get(handlers::main_handler))
-            .route("/test_error", get(handlers::test_error_handler))
-            .route("/test_panic", get(handlers::panic_handler))
-            .route("/healthz/live", get(handlers::live_handler))
-            .route("/healthz/ready", get(handlers::ready_handler))
-            .route("/info", get(handlers::info_handler))
-            .layer(middleware::from_fn(metrics::track_metrics))
+        let metrics = Arc::new(Metrics::new());
+        let common_layers = ServiceBuilder::new()
+            .layer(axum::extract::Extension(metrics.clone())) // 最外層
+            .layer(middleware::from_fn(
+                metrics_middleware::axum_metrics_middleware,
+            ))
             .layer(TraceLayer::new_for_http())
             .layer(PropagateRequestIdLayer::x_request_id())
-            // IMPORTANT: SetRequestIdLayer must be before GovernorLayer
             .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
-            // Add GovernorLayer for rate limiting
             .layer(GovernorLayer {
                 config: governor_config,
             });
 
-        let untracked_routes = Router::new().route("/metrics", get(handlers::metrics_handler));
+        let tracked_routes = Router::new()
+            .route("/", get(handlers::main_handler::<AppState>))
+            .route("/test_error", get(handlers::test_error_handler))
+            .route("/test_panic", get(handlers::panic_handler))
+            .route("/healthz/live", get(handlers::live_handler))
+            .route("/healthz/ready", get(handlers::ready_handler))
+            .route("/info", get(handlers::info_handler));
+
+        let untracked_routes =
+            Router::new().route("/metrics", get(handlers::metrics_handler::<AppState>));
 
         // ✅ 將兩個 Router 合併，並應用最終的 state
-        let mut router = Router::new().merge(tracked_routes).merge(untracked_routes);
+        let mut router = Router::new()
+            .merge(tracked_routes)
+            .merge(untracked_routes)
+            .layer(common_layers);
 
         // Apply HTTP headers from config
         if let Some(headers_config) = &app_state.config.http_headers {
@@ -101,9 +109,13 @@ impl Application {
 
     pub async fn run_until_stopped(self) -> Result<(), std::io::Error> {
         tracing::info!("Application started. Press Ctrl+C to shut down.");
-        axum::serve(self.listener, self.router.into_make_service())
-            .with_graceful_shutdown(shutdown_signal())
-            .await
+        axum::serve(
+            self.listener,
+            self.router
+                .into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(shutdown_signal())
+        .await
     }
 }
 

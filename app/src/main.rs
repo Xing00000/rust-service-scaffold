@@ -1,7 +1,4 @@
-// src/main.rs
-
-use axum_logging_service::app::Application;
-use axum_logging_service::config::Config;
+use app::{app::Application, config::Config};
 use dotenvy::dotenv;
 
 #[tokio::main]

@@ -1,221 +1,169 @@
-# rust-service-scaffold
-rust-service-scaffold
+# Rust Hexagonal Architecture Template
 
-## Telemetry Configuration (OpenTelemetry)
+一個基於 Rust 和 Axum 的生產級後端服務樣板，嚴格遵循**六邊形架構 (Hexagonal Architecture / Ports and Adapters)** 和領域驅動設計 (DDD) 的思想。
 
-This service is integrated with OpenTelemetry to provide distributed tracing and metrics.
+這個樣板的目標是提供一個高內聚、低耦合、可測試、可演化的起點，幫助你快速構建健壯且可長期維護的後端應用。
 
-### Overview
+[![CI](https://github.com/<YOUR_USERNAME>/<YOUR_REPO>/actions/workflows/ci.yml/badge.svg)](https://github.com/<YOUR_USERNAME>/<YOUR_REPO>/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
--   **Distributed Tracing**: Captures request flows and performance data, exportable to Jaeger.
--   **Metrics**: Collects key performance indicators (e.g., HTTP request counts, latency), exportable to Prometheus.
+---
 
-### Configuration via Environment Variables
+## ✨ 特性 (Features)
 
-The telemetry system can be configured using the following environment variables:
+- **🧅 六邊形架構**: 清晰的 `domain`, `application`, `infrastructure`, `presentation` 分層。
+- **📦 Cargo Workspace**: 強制模組邊界，加速編譯，提升專案組織性。
+- **🚀 生產級 Web 服務**:
+  - **Axum**: 高性能、符合人體工學的 Web 框架。
+  - **優雅關閉 (Graceful Shutdown)**: 安全地處理 `Ctrl+C` 和 `SIGTERM` 信號。
+  - **請求 ID**: 追蹤請求的完整生命週期。
+  - **限流 (Rate Limiting)**: 使用 `tower-governor` 防止濫用。
+- **🔭 全棧可觀測性 (Full-Stack Observability)**:
+  - **結構化日誌 (Logging)**: 使用 `tracing` 進行 JSON 格式的結構化日誌記錄。
+  - **指標 (Metrics)**: 使用 `prometheus` 導出關鍵服務指標。
+  - **追踪 (Tracing)**: 集成 `opentelemetry` 實現分散式追踪。
+  - **Panic Hook**: 捕獲未處理的 Panic 並以日誌形式記錄詳細信息。
+- **🛡️ 健壯的錯誤處理**: 統一的錯誤類型，自動映射到結構化的 HTTP 響應。
+- **⚙️ 靈活的配置管理**: 使用 `figment` 從文件和環境變數加載配置。
+- **🧪 全面的測試策略**: 涵蓋單元測試、整合測試和端到端測試。
+- **⚡ 開發者體驗優先**: 提供 `Makefile` 和腳本，簡化常見開發任務。
 
--   `RUST_LOG`: Controls log level (e.g., `info,axum_logging_service=debug`).
--   `OTEL_SERVICE_NAME`: Identifies your service in telemetry backends.
-    -   Example: `OTEL_SERVICE_NAME="my-awesome-app"`
-    -   Default: `axum-service` (as per `telemetry.rs`)
+## 🚀 快速上手 (Quick Start)
 
-#### Jaeger Exporter (Traces)
+### 前置要求
 
-The service is configured to export traces to a Jaeger agent.
+- [Rust toolchain](https://www.rust-lang.org/tools/install) (最新穩定版)
+- Docker & Docker Compose (用於運行資料庫等依賴)
 
--   `OTEL_EXPORTER_JAEGER_AGENT_HOST`: The hostname for the Jaeger agent.
-    -   Default: `localhost` (as per OpenTelemetry SDK defaults if not overridden by Jaeger specific env vars)
-    -   Example: `OTEL_EXPORTER_JAEGER_AGENT_HOST="127.0.0.1"` or `"jaeger"` if running in Docker.
--   `OTEL_EXPORTER_JAEGER_AGENT_PORT`: The port for the Jaeger agent's compact thrift protocol.
-    -   Default: `6831` (as per OpenTelemetry SDK defaults if not overridden by Jaeger specific env vars)
-    -   Example: `OTEL_EXPORTER_JAEGER_AGENT_PORT="6831"`
+### 1. 克隆專案
 
-*Note: For other Jaeger setups, such as exporting directly to a Jaeger collector via HTTP or gRPC, you might use variables like `OTEL_EXPORTER_JAEGER_ENDPOINT`. The current implementation uses the agent pipeline which is configured by the above variables or their SDK defaults.*
-
-#### Prometheus Exporter (Metrics)
-
-Metrics are exposed via a `/metrics` endpoint on the application's server address.
-
--   Example: If the service runs on `http://localhost:3000`, metrics will be available at `http://localhost:3000/metrics`.
--   Prometheus can be configured to scrape this endpoint.
--   The `OTEL_SERVICE_NAME` is also used as a resource attribute for metrics, helping to identify them in Prometheus.
-
-### How to Run with Telemetry Backends (Local Example)
-
-You can use Docker Compose to easily run Jaeger and Prometheus locally.
-
-1.  **Create `docker-compose.yml`**:
-    ```yaml
-    version: '3.8'
-    services:
-      jaeger:
-        image: jaegertracing/all-in-one:latest # Includes agent, collector, query, and UI
-        ports:
-          - "6831:6831/udp" # Jaeger agent UDP port for compact thrift protocol
-          - "6832:6832/udp" # Jaeger agent UDP port for binary thrift protocol (if needed by client)
-          - "5778:5778/tcp"  # Jaeger agent HTTP port for config (rarely used by clients)
-          - "16686:16686"  # Jaeger UI
-          - "14268:14268"  # Jaeger collector HTTP port for traces (e.g., for direct HTTP exporter)
-          # - "4317:4317"    # OTLP gRPC port (if Jaeger collector is configured for OTLP)
-          # - "4318:4318"    # OTLP HTTP port (if Jaeger collector is configured for OTLP)
-        environment:
-          - COLLECTOR_ZIPKIN_HOST_PORT=:9411 # For Zipkin compatibility if needed
-          # For newer Jaeger versions, OTLP is often enabled by default or via specific OTLP env vars.
-          # Example: JAEGER_OTLP_GRPC_HOST_PORT=:4317 or similar depending on Jaeger version.
-          # The opentelemetry-jaeger crate by default uses agent, not OTLP to Jaeger.
-
-      prometheus:
-        image: prom/prometheus:latest
-        volumes:
-          - ./prometheus.yml:/etc/prometheus/prometheus.yml # Mount prometheus config
-        ports:
-          - "9090:9090"
-        command:
-          - '--config.file=/etc/prometheus/prometheus.yml'
-    ```
-
-2.  **Create `prometheus.yml`** (in the same directory as `docker-compose.yml`):
-    ```yaml
-    global:
-      scrape_interval: 15s # How frequently to scrape targets
-
-    scrape_configs:
-      - job_name: 'axum-service-telemetry'
-        # Adjust the target based on where your Axum service is accessible from the Prometheus container.
-        # If your Axum service is running on your host machine (not in Docker):
-        # For Docker on Linux, 'localhost' might work if network_mode=host, or use host IP.
-        # For Docker Desktop (Windows/macOS), use 'host.docker.internal'.
-        static_configs:
-          - targets: ['host.docker.internal:3000']
-        # If your Axum service is also running in a Docker container on the same Docker network:
-        # static_configs:
-        #   - targets: ['your_axum_app_container_name:3000']
-    ```
-
-3.  **Start backends**:
-    ```bash
-    docker-compose up -d
-    ```
-
-4.  **Run your Axum service** with appropriate environment variables:
-    ```bash
-    export OTEL_SERVICE_NAME="my-axum-app"
-    # If Jaeger is running via Docker Compose as above, and your app is on the host,
-    # the default Jaeger agent host (localhost) and port (6831) should work.
-    # export OTEL_EXPORTER_JAEGER_AGENT_HOST="localhost"
-    # export OTEL_EXPORTER_JAEGER_AGENT_PORT="6831"
-    cargo run
-    ```
-    (Ensure your application is listening on `0.0.0.0:3000` or similar to be accessible from `host.docker.internal` or other containers, not just `127.0.0.1:3000` which would only be accessible from the host itself). Your current `main.rs` uses `127.0.0.1:3000`, this might need to be changed to `0.0.0.0:3000` for the Dockerized Prometheus to scrape it.
-
-5.  **Access Telemetry Data**:
-    -   **Jaeger UI** (Traces): Open `http://localhost:16686` in your browser. Select your service (`my-axum-app` or whatever `OTEL_SERVICE_NAME` you set) and find traces.
-    -   **Prometheus UI** (Metrics): Open `http://localhost:9090`. You can query metrics like `http_server_active_requests`, `http_server_duration_seconds_count`, or `http_server_duration_seconds_bucket`. The exact metric names are defined by the OpenTelemetry HTTP semantic conventions. Check the `/metrics` endpoint of your service (e.g., `http://localhost:3000/metrics`) for available metrics.
-
-## Rate Limiting (Tower Governor)
-
-This service uses `tower_governor` for rate limiting to protect against excessive requests.
-
-### Configuration
-
-The rate limiter is configured in `src/app.rs`. By default, it is set to allow a burst size of 2 requests per second.
-
-```rust
-// Example configuration in src/app.rs
-use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
-// ...
-    .layer(
-        GovernorLayer::new(&Arc::new(
-            GovernorConfigBuilder::default()
-                .burst_size(2) // Allow 2 requests per second
-                .finish()
-                .unwrap(),
-        ))
-    );
+```bash
+git clone https://github.com/<YOUR_USERNAME>/<YOUR_REPO>.git
+cd <YOUR_REPO>
 ```
 
-You can adjust the `burst_size` and other parameters (like `per_second`, `per_minute`, etc.) in `GovernorConfigBuilder` as needed. Refer to the `tower_governor` documentation for more advanced configurations.
+### 2. 配置環境
 
-### Integration with Redis for Multi-Replica Deployments
+複製預設的設定檔。你可以根據需要修改 `.env` 文件。
 
-When deploying multiple instances of the service, a distributed rate limiter is necessary to ensure consistent behavior. `tower_governor` supports using Redis as a backend for this purpose.
+```bash
+cp .env.example .env
+```
 
-To integrate with Redis:
+### 3. 啟動依賴服務 (如 PostgreSQL)
 
-1.  **Add Redis dependencies**:
-    You'll need to add `tower_governor` with the `redis` feature and a Redis client like `r2d2_redis` or `redis` (async).
-    ```toml
-    # In Cargo.toml
-    tower_governor = { version = "0.4.1", features = ["redis"] }
-    r2d2 = "0.8"
-    r2d2_redis = "0.14" # Or an async redis client
-    # OR if using async redis directly:
-    # redis = { version = "0.23", features = ["tokio-comp"] }
-    ```
+```bash
+docker-compose up -d
+```
 
-2.  **Configure Governor with RedisStateStore**:
-    Modify `src/app.rs` to use `GovernorConfigBuilder::use_state_store` with a Redis connection pool.
+### 4. 運行開發伺服器
 
-    ```rust
-    // Example (conceptual) for src/app.rs using r2d2_redis:
-    use tower_governor::{
-        governor::GovernorConfigBuilder,
-        key_extractor::SmartIpKeyExtractor, // To rate limit by IP
-        GovernorLayer,
-        RedisStateStore, // If using the "redis" feature
-    };
-    use r2d2_redis::{r2d2, RedisConnectionManager};
-    use std::sync::Arc;
-    // ...
+我們提供了方便的 Makefile 命令來啟動開發伺服器，它會監聽文件變更並自動重新加載。
 
-    // Inside your Application::build or similar setup function:
+```bash
+make dev
+# 或者直接運行腳本
+# sh ./scripts/dev.sh
+```
 
-    // 1. Setup Redis connection pool
-    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string());
-    let manager = RedisConnectionManager::new(redis_url).expect("Failed to create Redis manager");
-    let pool = r2d2::Pool::builder()
-        .build(manager)
-        .expect("Failed to create Redis pool");
+服務將在 `http://127.0.0.1:8080` (預設) 上啟動。
 
-    // 2. Create the Redis state store
-    let state_store = RedisStateStore::new(pool);
+### 5. 運行測試
 
-    // 3. Build the governor config using the Redis store
-    let governor_conf = Arc::new(
-        GovernorConfigBuilder::default()
-            .key_extractor(SmartIpKeyExtractor) // Rate limit based on IP
-            .burst_size(10) // Example: 10 requests
-            .period(std::time::Duration::from_secs(60)) // Per minute
-            .use_state_store(state_store)
-            .finish()
-            .unwrap(),
-    );
+運行所有測試，包括單元測試和整合測試。
 
-    // 4. Add the GovernorLayer
-    // ...
-    // .layer(GovernorLayer::new(&governor_conf))
-    // ...
-    ```
-    Ensure your Redis server is running and accessible by the application. You'll need to set the `REDIS_URL` environment variable.
+```bash
+make test
+# 或者直接運行腳本
+# sh ./scripts/test.sh
+```
 
-    **Note**: The above Redis integration example is conceptual. You'll need to adapt it to your specific error handling, configuration management, and choice of synchronous/asynchronous Redis client. For an asynchronous setup (which is generally preferred with Axum/Tokio), you would use an async Redis client and an async-compatible state store if `tower_governor` provides one directly or if you build one. The current `RedisStateStore` in `tower_governor` might expect a blocking client, so careful integration is needed. If `tower_governor`'s `RedisStateStore` is blocking, running it in `tokio::spawn_blocking` might be necessary for each state access, or use a dedicated thread pool for Redis operations. Always check the `tower_governor` documentation for the most up-to-date practices for Redis integration.
+## 🏗️ 架構概覽
 
-### Custom Instrumentation
+本專案採用嚴格的六邊形架構，依賴關係永遠是**從外向內**。
 
--   **Custom Spans**: You can add custom child spans within your application logic using `tracing` macros like `tracing::info_span!`, `tracing::debug_span!`, etc. These will be automatically correlated with the parent request span due to the `tracing-opentelemetry` layer.
-    ```rust
-    // Example from the service's handler function:
-    let _custom_work_span_guard = tracing::info_span!(
-        "custom_work_in_handler",
-        service_operation = "generate_greeting", // custom attributes
-        request_id = %request_id // another custom attribute
-    ).entered(); // Enters the span; it becomes current until the guard is dropped.
+```
+Presentation / Infrastructure --> Application --> Domain
+```
 
-    tracing::info!("This log message is part of the custom_work_in_handler span.");
-    ```
--   **Custom Metrics**: While not extensively demonstrated in the current template, custom metrics (e.g., business-specific counters, gauges, histograms) can be created using the OpenTelemetry Metrics API (`opentelemetry::metrics`). You would typically obtain a `Meter` from the global `MeterProvider` (which was initialized in `main.rs`) and use it to create and record metric instruments. Refer to the `opentelemetry` crate documentation for details on creating custom metrics.
-find . -path ./target -prune -o -type f -name "*.rs" -print | while read file; do
+- **Domain**: 核心業務邏輯和實體。最純淨的一層，不依賴任何外部框架。
+- **Application**: 應用程式的用例 (Use Cases) 和端口 (Ports)。定義了應用「做什麼」，但不關心「如何做」。
+- **Infrastructure**: 外部系統的具體實現 (Adapters)，如資料庫、快取、消息隊列。實現 Application 層定義的端口。
+- **Presentation**: 對外暴露的介面 (Driving Adapters)，如 REST API、gRPC 或 CLI。
+
+這種結構確保了核心業務邏輯的獨立性和可測試性，使得替換任何外部依賴（如 Web 框架或資料庫）都變得相對容易。
+
+## 📁 目錄結構
+
+```text
+hexagonal_template/
+├── Cargo.toml            # Workspace 根配置
+├── Makefile              # 開發自動化命令
+├── scripts/              # 常用腳本
+│
+├── crates/               # 核心 Library Crates
+│   ├── domain/           # 核心業務邏輯、實體 (Entities)
+│   ├── application/      # 用例 (Use Cases)、端口 (Ports)
+│   ├── infra_db_postgres/# PostgreSQL 適配器
+│   ├── infra_telemetry/  # 可觀測性 (日誌/指標/追踪) 適配器
+│   └── ...               # 其他基礎設施適配器
+│
+├── presentation/         # 對外介面層
+│   └── pres_web_axum/    # Axum Web API 的實現 (Handlers/Router/DTOs)
+│
+├── app/                  # Binary Crate (可執行檔)
+│   └── src/main.rs       # 應用程式組裝點 (Composition Root)
+│
+├── config/               # 預設設定檔 (e.g., default.toml)
+│
+└── tests/                # 跨 Crate 的整合與端到端測試
+```
+
+## 🧪 測試策略
+
+我們採用分層的測試策略，以確保程式碼品質和開發效率：
+
+1.  **單元測試 (`#[cfg(test)]`)**:
+
+    - **位置**: 在各個 crate 的 `src/` 目錄下。
+    - **目標**: 測試單一模組或函數的邏輯，速度快，無 I/O。使用 mock 或 fake 物件來模擬依賴。
+
+2.  **整合測試 (頂層 `tests/` 目錄)**:
+
+    - **位置**: 專案根目錄下的 `tests/`。
+    - **目標**: 測試 crate 之間的協作和公開 API 的行為。這些測試像外部用戶一樣調用 crate。
+
+3.  **端到端測試 (E2E)**:
+    - 整合測試的一種，會啟動完整的應用程式（或其輕量版本）和真實的外部依賴（如資料庫），來模擬真實的用戶場景。
+
+## 🔧 配置 (Configuration)
+
+應用程式的配置通過以下方式加載，優先級從低到高：
+
+1.  **`config/default.toml`**: 存儲所有配置項的預設值。
+2.  **環境變數**:
+    - 可以通過 `.env` 文件設置。
+    - 變數需以 `APP_` 為前綴，並使用 `__` 作為層級分隔符。例如，要覆蓋 `db.host`，需設置環境變數 `APP_DB__HOST=...`。
+
+所有可配置的選項都在 `app/src/config.rs` 中定義。
+
+## 📜 貢獻 (Contributing)
+
+歡迎提交 Pull Requests！為了保持程式碼品質，請確保：
+
+- 你的程式碼通過了 `cargo clippy --all-targets -- -D warnings` 的檢查。
+- 你的程式碼通過了 `cargo fmt` 的格式化。
+- 所有現有測試都能通過，並為新功能添加了適當的測試。
+
+## 📄 授權 (License)
+
+本專案採用 [MIT License](LICENSE)。
+
+```
+find . -path ./target -prune -o -type f \( -name "*.rs" -o -name "*.toml" \) -print | while read file; do
   echo "=== $file ===" >> all_code.txt
   cat "$file" >> all_code.txt
   echo -e "\n" >> all_code.txt
 done
+
+```

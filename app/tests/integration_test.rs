@@ -1,12 +1,18 @@
+use app::{
+    config::{self, Config},
+    state::AppState,
+};
 use axum::{routing::get, Extension, Router};
-use axum_logging_service::infrastructure::{telemetry, web::handlers};
+
+use infra_telemetry::telemetry;
+use pres_web_axum::handlers;
 use serde_json::Value;
 use std::{
     panic,
     sync::{Arc, Mutex},
 };
 use tokio::time::{sleep, Duration};
-use tower::ServiceExt;
+use tower::ServiceExt; // For `oneshot`
 use tower_http::{
     request_id::{MakeRequestUuid, PropagateRequestIdLayer, RequestId, SetRequestIdLayer},
     trace::TraceLayer,
@@ -16,8 +22,7 @@ use tracing_futures::WithSubscriber;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
 // 步驟 1 & 2: 重新引入 Mutex 來序列化 panic hook 測試
 use axum::body::{to_bytes, Body};
-use axum_logging_service::app::AppState;
-use axum_logging_service::config::Config;
+
 // ✅ 修正: 從 hyper use 語句中移除 Body
 use hyper::{Request, StatusCode};
 use once_cell::sync::Lazy;
@@ -79,7 +84,7 @@ async fn test_logging_with_request_id() {
         let app = Router::new()
             .route("/test", get(test_handler))
             .layer(TraceLayer::new_for_http());
-        use tower::ServiceExt;
+
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), axum::http::StatusCode::OK);
         sleep(Duration::from_millis(50)).await;
@@ -177,7 +182,7 @@ fn test_panic_hook_logs_details() {
             // 斷言 panic 的位置信息
             let location = log_entry["fields"]["location"].as_str().unwrap();
             assert!(
-                location.contains("src/infrastructure/web/handlers.rs"),
+                location.contains("presentation/pres_web_axum/src/handlers.rs"),
                 "Log should contain the correct panic location"
             );
 
@@ -366,7 +371,7 @@ async fn test_structured_error_response() {
         otel_service_name: "test-service".to_string(),
         rate_limit_per_second: 1,
         rate_limit_burst_size: 50,
-        http_headers: Some(vec![axum_logging_service::config::HttpHeader {
+        http_headers: Some(vec![config::HttpHeader {
             name: "X-Test-Header".to_string(),
             value: "TestValue".to_string(),
         }]),
@@ -380,7 +385,7 @@ async fn test_structured_error_response() {
     // ✅ 修正: 複製 main application 的 middleware stack
     // 這樣可以確保 `RequestId` extension 在 handler 中可用。
     let app = Router::new()
-        .route("/", get(handlers::main_handler))
+        .route("/", get(handlers::main_handler::<AppState>))
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(TraceLayer::new_for_http())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
@@ -415,7 +420,7 @@ async fn test_structured_error_response() {
 // Test for rate limiting
 #[tokio::test]
 async fn test_rate_limiting() {
-    // use axum_logging_service::app::Application; // This was for a potential alternative way to test, not needed now
+    // use ::app::Application; // This was for a potential alternative way to test, not needed now
     use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 
     // Configure a governor layer similar to the main application

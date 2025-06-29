@@ -1,7 +1,7 @@
 // src/infrastructure/telemetry.rs
 
-use crate::config::Config;
-use crate::infrastructure::error::InfrastructureError;
+use crate::config::TelemetryConfig;
+use crate::error::TelemetryError;
 
 use opentelemetry::{
     global,
@@ -17,7 +17,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 /// 使用 Pipeline Builder 初始化 OTLP 追踪器。
 fn init_tracer_provider(
-    config: &Config,
+    config: &TelemetryConfig,
     resource: Resource,
 ) -> Result<SdkTracerProvider, TraceError> {
     let otlp_exporter = opentelemetry_otlp::SpanExporter::builder()
@@ -33,7 +33,7 @@ fn init_tracer_provider(
 }
 
 /// 初始化 `tracing` subscriber，並集成 OpenTelemetry layer。
-fn init_subscriber(config: &Config, provider: SdkTracerProvider) {
+fn init_subscriber(config: &TelemetryConfig, provider: SdkTracerProvider) {
     let tracer = provider.tracer("tracing-opentelemetry");
     let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
@@ -83,7 +83,7 @@ pub fn panic_hook(panic_info: &PanicHookInfo) {
 }
 
 /// 完整的遙測初始化流程
-pub fn init_telemetry(config: &Config) -> Result<prometheus::Registry, InfrastructureError> {
+pub fn init_telemetry(config: &TelemetryConfig) -> Result<prometheus::Registry, TelemetryError> {
     let resource = Resource::builder()
         .with_attributes(vec![KeyValue::new(
             SERVICE_NAME,
@@ -98,7 +98,7 @@ pub fn init_telemetry(config: &Config) -> Result<prometheus::Registry, Infrastru
     let prometheus_exporter = opentelemetry_prometheus::exporter()
         .with_registry(registry.clone()) // <- 使用新的 Registry
         .build()
-        .map_err(|e| InfrastructureError::MetricsInit(e.to_string()))?;
+        .map_err(|e| TelemetryError::MetricsInit(e.to_string()))?;
 
     // 初始化指標系統
     let meter_provider = SdkMeterProvider::builder()
@@ -112,7 +112,7 @@ pub fn init_telemetry(config: &Config) -> Result<prometheus::Registry, Infrastru
 
     // 初始化追踪系統
     let tracer_provider = init_tracer_provider(config, resource)
-        .map_err(|e| InfrastructureError::TelemetryInit(e.to_string()))?;
+        .map_err(|e| TelemetryError::TelemetryInit(e.to_string()))?;
 
     // 初始化日誌系統並與追踪集成
     init_subscriber(config, tracer_provider);
