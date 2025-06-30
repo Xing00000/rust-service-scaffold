@@ -45,46 +45,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 
 [[package]]
-name = "app"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "application",
- "async-trait",
- "axum",
- "contracts",
- "domain",
- "dotenvy",
- "figment",
- "hyper",
- "infra_db_postgres",
- "infra_telemetry",
- "once_cell",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry-prometheus",
- "opentelemetry-semantic-conventions",
- "opentelemetry_sdk",
- "pres_web_axum",
- "prometheus",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tower 0.4.13",
- "tower-http 0.5.2",
- "tower_governor",
- "tracing",
- "tracing-futures",
- "tracing-opentelemetry",
- "tracing-subscriber",
- "uuid",
- "validator",
- "vergen",
-]
-
-[[package]]
 name = "application"
 version = "0.1.0"
 dependencies = [
@@ -235,6 +195,46 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "bootstrap"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "application",
+ "async-trait",
+ "axum",
+ "contracts",
+ "domain",
+ "dotenvy",
+ "figment",
+ "hyper",
+ "infra_db_postgres",
+ "infra_telemetry",
+ "once_cell",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry-prometheus",
+ "opentelemetry-semantic-conventions",
+ "opentelemetry_sdk",
+ "pres_web_axum",
+ "prometheus",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tower 0.4.13",
+ "tower-http 0.5.2",
+ "tower_governor",
+ "tracing",
+ "tracing-futures",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+ "uuid",
+ "validator",
+ "vergen",
 ]
 
 [[package]]

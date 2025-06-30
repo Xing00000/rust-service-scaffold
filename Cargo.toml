@@ -17,7 +17,7 @@ resolver = "2"
 # for parallel compilation and efficient caching in CI/CD pipelines.
 members = [
     # --- Application Binary ---
-    "app",
+    "bootstrap",
 
     # --- Core Library Crates ---
     "crates/domain",

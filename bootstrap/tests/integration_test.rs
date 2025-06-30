@@ -1,8 +1,8 @@
-use app::{
+use axum::{routing::get, Extension, Router};
+use bootstrap::{
     config::{self, Config},
     state::AppState,
 };
-use axum::{routing::get, Extension, Router};
 
 use domain::{error::DomainError, user::User};
 use infra_telemetry::telemetry;
@@ -448,7 +448,7 @@ async fn test_structured_error_response() {
 // Test for rate limiting
 #[tokio::test]
 async fn test_rate_limiting() {
-    // use ::app::Application; // This was for a potential alternative way to test, not needed now
+    // use ::bootstrap::Application; // This was for a potential alternative way to test, not needed now
     use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 
     // Configure a governor layer similar to the main application

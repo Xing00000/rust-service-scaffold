@@ -1,4 +1,4 @@
-use app::{app::Application, config::Config};
+use bootstrap::{app::Application, config::Config};
 use dotenvy::dotenv;
 
 #[tokio::main]

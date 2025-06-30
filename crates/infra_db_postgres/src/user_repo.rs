@@ -27,7 +27,7 @@ impl UserRepository for PostgresUserRepository {
         let row: UserRow = sqlx::query_as!(UserRow, "SELECT id, name FROM users WHERE id = $1", id)
             .fetch_one(&self.pool)
             .await
-            .map_err(map_sqlx_err)?; // Convert sqlx::Error -> DbError -> DomainError
+            .map_err(DbError::from)?; // Convert sqlx::Error -> DbError -> DomainError
         Ok(User {
             id: row.id,
             name: row.name,
@@ -43,22 +43,11 @@ impl UserRepository for PostgresUserRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(map_sqlx_err)?; // Convert sqlx::Error -> DbError -> DomainError
+        .map_err(DbError::from)?; // Convert sqlx::Error -> DbError -> DomainError
         Ok(())
     }
 
     async fn shutdown(&self) {
         self.pool.close().await;
-    }
-}
-
-fn map_sqlx_err(e: sqlx::Error) -> DomainError {
-    use sqlx::Error::*;
-    match &e {
-        RowNotFound => DomainError::NotFound("user".into()),
-        Database(db) if db.is_unique_violation() => {
-            DomainError::Duplicate(db.message().to_string())
-        }
-        _ => DomainError::Unexpected(e.to_string()),
     }
 }
