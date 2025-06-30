@@ -2,6 +2,7 @@
 name = "infra_telemetry"
 version = "0.1.0"
 edition = "2021"
+publish = false
 authors = ["Your Name <your.email@example.com>"]
 license = "MIT OR Apache-2.0"
 description = "Infrastructure adapter for telemetry (tracing, OpenTelemetry, Prometheus) in hexagonal Axum architecture."
@@ -27,7 +28,7 @@ prometheus = { workspace = true }
 # --- 基本公用套件 ---
 thiserror = { workspace = true }
 anyhow = { workspace = true }
-once_cell = { workspace = true }
+# once_cell = { workspace = true } # Not used in this crate's library code
 
 # --- Serde (僅序列化需要, 如有) ---
 serde = { workspace = true }

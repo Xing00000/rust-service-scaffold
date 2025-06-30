@@ -8,7 +8,7 @@ use axum::middleware::Next;
 use axum::response::IntoResponse;
 use axum::Extension;
 
-use crate::metrics::Metrics; // <-- 只用 trait，不知道 axum 細節
+use infra_telemetry::metrics::Metrics; // Updated path
 
 // 把 Metrics 傳進來 (可透過 extension or app_state)
 pub async fn axum_metrics_middleware(

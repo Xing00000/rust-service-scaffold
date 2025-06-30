@@ -1,6 +1,7 @@
 use crate::error::DbError;
 use crate::models::UserRow;
-use application::ports::{RepoError, User, UserRepository};
+use application::ports::{User, UserRepository}; // RepoError removed
+use domain::error::DomainError; // Added
 use async_trait::async_trait;
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 use uuid::Uuid;
@@ -22,18 +23,18 @@ impl PostgresUserRepository {
 
 #[async_trait]
 impl UserRepository for PostgresUserRepository {
-    async fn find(&self, id: &Uuid) -> Result<User, RepoError> {
+    async fn find(&self, id: &Uuid) -> Result<User, DomainError> {
         let row: UserRow = sqlx::query_as!(UserRow, "SELECT id, name FROM users WHERE id = $1", id)
             .fetch_one(&self.pool)
             .await
-            .map_err(DbError::from)?;
+            .map_err(|e| DbError::from(e).into())?; // Convert sqlx::Error -> DbError -> DomainError
         Ok(User {
             id: row.id,
             name: row.name,
         })
     }
 
-    async fn save(&self, user: &User) -> Result<(), RepoError> {
+    async fn save(&self, user: &User) -> Result<(), DomainError> {
         sqlx::query!(
             r#"INSERT INTO users (id, name) VALUES ($1, $2)
                ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name"#,
@@ -42,7 +43,13 @@ impl UserRepository for PostgresUserRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(DbError::from)?;
+        .map_err(|e| DbError::from(e).into())?; // Convert sqlx::Error -> DbError -> DomainError
         Ok(())
+    }
+
+    async fn shutdown(&self) {
+        tracing::info!("Closing database pool for PostgresUserRepository...");
+        self.pool.close().await;
+        tracing::info!("Database pool for PostgresUserRepository closed.");
     }
 }

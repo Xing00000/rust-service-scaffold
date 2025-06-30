@@ -13,8 +13,13 @@ use prometheus::{Encoder, TextEncoder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tower_http::request_id::RequestId;
+use uuid::Uuid; // For new user ID generation
 
+use crate::dtos::{CreateUserRequest, GetUserPath, UserResponse}; // Import DTOs
 use crate::error::ApiError;
+use domain::user::User as DomainUser; // Alias for domain User
+use contracts::HasUserRepository; // Trait for accessing user_repo
+use axum::extract::Path; // For path parameters
 
 #[derive(Deserialize)]
 pub struct HandlerParams {
@@ -64,7 +69,7 @@ where
 
 // 這個 handler 返回 `ApiError::Internal`，對應 HTTP 500。
 pub async fn test_error_handler() -> Result<&'static str, ApiError> {
-    Err(AppError::Repo(RepoError::Unexpected(
+    Err(AppError::Domain(DomainError::Unexpected(
         "This is a test error triggered from the /test_error route.".to_string(),
     ))
     .into())
@@ -112,7 +117,6 @@ pub async fn metrics_handler<S>(State(app_state): State<S>) -> impl IntoResponse
 where
     S: HasRegistry + Send + Sync + 'static,
 {
-    // ✅ 不再需要 State
     let mut buffer = Vec::new();
     let encoder = TextEncoder::new();
 
@@ -131,4 +135,53 @@ where
         )
             .into_response()
     }
+}
+
+// === User Handlers ===
+
+pub async fn create_user_handler<S>(
+    State(app_state): State<S>,
+    Json(payload): Json<CreateUserRequest>,
+) -> Result<Json<UserResponse>, ApiError>
+where
+    S: HasUserRepository + Send + Sync + 'static,
+{
+    tracing::info!("Attempting to create user with name: {}", payload.name);
+
+    // In a real application, you would likely call an application service here.
+    // The service would handle creating the User domain entity, validation, etc.
+    // For this example, we'll interact directly with the repository.
+    let new_user = DomainUser {
+        id: Uuid::new_v4(), // Generate a new UUID for the user
+        name: payload.name,
+    };
+
+    app_state
+        .user_repo()
+        .save(&new_user)
+        .await
+        .map_err(AppError::Domain)?; // Map DomainError from repo to AppError
+
+    tracing::info!("User created successfully with ID: {}", new_user.id);
+    Ok(Json(UserResponse::from(new_user)))
+}
+
+pub async fn get_user_handler<S>(
+    State(app_state): State<S>,
+    Path(path_params): Path<GetUserPath>,
+) -> Result<Json<UserResponse>, ApiError>
+where
+    S: HasUserRepository + Send + Sync + 'static,
+{
+    let user_id = path_params.id;
+    tracing::info!("Attempting to fetch user with ID: {}", user_id);
+
+    let user = app_state
+        .user_repo()
+        .find(&user_id)
+        .await
+        .map_err(AppError::Domain)?; // Map DomainError from repo to AppError
+
+    tracing::info!("User found: {:?}", user);
+    Ok(Json(UserResponse::from(user)))
 }

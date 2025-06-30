@@ -1,5 +1,3 @@
-use crate::ports::RepoError;
-
 use contracts::CoreError;
 use domain::error::DomainError;
 use thiserror::Error;
@@ -10,6 +8,5 @@ pub enum AppError {
     Core(#[from] CoreError),
     #[error(transparent)]
     Domain(#[from] DomainError),
-    #[error(transparent)]
-    Repo(#[from] RepoError),
+    // RepoError was removed and its variants merged into DomainError
 }

@@ -4,10 +4,17 @@
 name = "domain"
 version = "0.1.0"
 edition = "2021"
+publish = false # Prevent accidental publishing
 authors = ["Your Name <your.email@example.com>"] # 建議填寫你的名字和郵箱
 description = "Contains core business logic, entities, and domain-specific errors. It should be pure and framework-agnostic."
 repository = "https://github.com/your-username/axum_hexagonal_template" # 建議填寫你的項目倉庫
 license = "MIT OR Apache-2.0" # 選擇一個合適的開源許可證，或移除
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
 
 [dependencies]
 # `thiserror` 用於定義結構化的、符合 Rust 慣例的錯誤類型

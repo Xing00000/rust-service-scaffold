@@ -4,9 +4,16 @@
 name = "application"
 version = "0.1.0"
 edition = "2021"
+publish = false # Prevent accidental publishing
 authors = ["Your Name <your.email@example.com>"]                                                     # <-- 請修改為你的資訊
 description = "Contains application services (use cases) and defines ports (traits) for the domain."
 license = "MIT OR Apache-2.0"                                                                        # 或者你選擇的許可證
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
 
 [dependencies]
 contracts = { path = "../contracts" } # 依賴於 contracts 層，這是 Application 層唯一會直接依賴的抽象層
