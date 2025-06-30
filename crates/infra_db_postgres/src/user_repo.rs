@@ -1,8 +1,8 @@
 use crate::error::DbError;
 use crate::models::UserRow;
-use application::ports::{User, UserRepository}; // RepoError removed
-use domain::error::DomainError; // Added
+use application::ports::UserRepository; // RepoError removed
 use async_trait::async_trait;
+use domain::{error::DomainError, user::User}; // Added
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 use uuid::Uuid;
 
@@ -27,7 +27,7 @@ impl UserRepository for PostgresUserRepository {
         let row: UserRow = sqlx::query_as!(UserRow, "SELECT id, name FROM users WHERE id = $1", id)
             .fetch_one(&self.pool)
             .await
-            .map_err(|e| DbError::from(e).into())?; // Convert sqlx::Error -> DbError -> DomainError
+            .map_err(map_sqlx_err)?; // Convert sqlx::Error -> DbError -> DomainError
         Ok(User {
             id: row.id,
             name: row.name,
@@ -43,13 +43,22 @@ impl UserRepository for PostgresUserRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| DbError::from(e).into())?; // Convert sqlx::Error -> DbError -> DomainError
+        .map_err(map_sqlx_err)?; // Convert sqlx::Error -> DbError -> DomainError
         Ok(())
     }
 
     async fn shutdown(&self) {
-        tracing::info!("Closing database pool for PostgresUserRepository...");
         self.pool.close().await;
-        tracing::info!("Database pool for PostgresUserRepository closed.");
+    }
+}
+
+fn map_sqlx_err(e: sqlx::Error) -> DomainError {
+    use sqlx::Error::*;
+    match &e {
+        RowNotFound => DomainError::NotFound("user".into()),
+        Database(db) if db.is_unique_violation() => {
+            DomainError::Duplicate(db.message().to_string())
+        }
+        _ => DomainError::Unexpected(e.to_string()),
     }
 }

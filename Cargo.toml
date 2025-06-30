@@ -58,7 +58,7 @@ hyper = { version = "1.6.0", default-features = false, features = ["full"] }
 tower = "0.4.13" # Note: Only `util` feature is for dev, but `tower` itself is used more broadly
 tower-http = { version = "0.5.2", default-features = false, features = ["set-header", "request-id", "trace", "fs"] }
 tower_governor = "0.7.0"
-sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "macros", "offline"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "macros"] }
 
 async-trait = "0.1"
 # --- Async Runtime ---
@@ -73,7 +73,7 @@ opentelemetry_sdk = { version = "0.28.0", default-features = false, features = [
     "trace",
     "metrics",
 ] }
-opentelemetry-otlp = { version = "0.28.0", default-features = false, features = ["tonic", "trace"] }
+opentelemetry-otlp = { version = "0.28.0", features = ["tonic", "trace"] }
 opentelemetry-semantic-conventions = "0.28.0"
 opentelemetry-prometheus = "0.28.0"
 tracing-opentelemetry = "0.29.0"
@@ -131,3 +131,11 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 
+[workspace.lints.rust]
+# 這裡的 key 就是 lint group / lint name  
+# value 可以是 "allow" | "warn" | "deny" | "forbid"
+unused = "deny"
+rust_2018_idioms = "deny"
+unused_imports = "deny"
+
+# …依照喜好補

@@ -1,5 +1,6 @@
 use application::error::AppError;
-use application::ports::RepoError;
+
+use application::use_cases::create_user::{CreateUserCmd, HasCreateUserUc};
 use axum::http::StatusCode;
 use axum::Json;
 use axum::{
@@ -13,13 +14,10 @@ use prometheus::{Encoder, TextEncoder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tower_http::request_id::RequestId;
-use uuid::Uuid; // For new user ID generation
+// For new user ID generation
 
-use crate::dtos::{CreateUserRequest, GetUserPath, UserResponse}; // Import DTOs
+use crate::dtos::{CreateUserRequest, UserResponse}; // Import DTOs
 use crate::error::ApiError;
-use domain::user::User as DomainUser; // Alias for domain User
-use contracts::HasUserRepository; // Trait for accessing user_repo
-use axum::extract::Path; // For path parameters
 
 #[derive(Deserialize)]
 pub struct HandlerParams {
@@ -144,44 +142,16 @@ pub async fn create_user_handler<S>(
     Json(payload): Json<CreateUserRequest>,
 ) -> Result<Json<UserResponse>, ApiError>
 where
-    S: HasUserRepository + Send + Sync + 'static,
+    S: HasCreateUserUc + Send + Sync + 'static,
 {
     tracing::info!("Attempting to create user with name: {}", payload.name);
 
-    // In a real application, you would likely call an application service here.
-    // The service would handle creating the User domain entity, validation, etc.
-    // For this example, we'll interact directly with the repository.
-    let new_user = DomainUser {
-        id: Uuid::new_v4(), // Generate a new UUID for the user
-        name: payload.name,
-    };
-
-    app_state
-        .user_repo()
-        .save(&new_user)
-        .await
-        .map_err(AppError::Domain)?; // Map DomainError from repo to AppError
-
-    tracing::info!("User created successfully with ID: {}", new_user.id);
-    Ok(Json(UserResponse::from(new_user)))
-}
-
-pub async fn get_user_handler<S>(
-    State(app_state): State<S>,
-    Path(path_params): Path<GetUserPath>,
-) -> Result<Json<UserResponse>, ApiError>
-where
-    S: HasUserRepository + Send + Sync + 'static,
-{
-    let user_id = path_params.id;
-    tracing::info!("Attempting to fetch user with ID: {}", user_id);
-
     let user = app_state
-        .user_repo()
-        .find(&user_id)
+        .create_user_uc()
+        .exec(CreateUserCmd { name: payload.name })
         .await
         .map_err(AppError::Domain)?; // Map DomainError from repo to AppError
 
-    tracing::info!("User found: {:?}", user);
+    tracing::info!("User created successfully with ID: {}", user.id);
     Ok(Json(UserResponse::from(user)))
 }

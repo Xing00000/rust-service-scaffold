@@ -1,8 +1,6 @@
 #![deny(
     bad_style,
     future_incompatible,
-    missing_debug_implementations,
-    missing_docs,
     nonstandard_style,
     rust_2018_idioms,
     unreachable_pub,
@@ -15,3 +13,4 @@
 pub mod error;
 pub mod ports;
 // pub mod use_cases; // 範例：將來可以有具體的用例模塊
+pub mod use_cases;

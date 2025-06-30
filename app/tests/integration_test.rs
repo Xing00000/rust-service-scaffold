@@ -4,6 +4,7 @@ use app::{
 };
 use axum::{routing::get, Extension, Router};
 
+use domain::{error::DomainError, user::User};
 use infra_telemetry::telemetry;
 use pres_web_axum::handlers;
 use serde_json::Value;
@@ -21,10 +22,9 @@ use tracing::subscriber::with_default;
 use tracing_futures::WithSubscriber;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
 // 步驟 1 & 2: 重新引入 Mutex 來序列化 panic hook 測試
-use application::ports::RepoError;
+use application::use_cases::create_user::{CreateUserUseCase, UserSvc};
 use axum::body::{to_bytes, Body};
-// ✅ 修正: 從 hyper use 語句中移除 Body
-use application::ports::User;
+
 use application::ports::UserRepository;
 use async_trait::async_trait;
 use hyper::{Request, StatusCode};
@@ -370,16 +370,18 @@ fn test_global_panic_hook_logs_from_tokio_task() {
 pub struct FakeUserRepository;
 #[async_trait]
 impl UserRepository for FakeUserRepository {
-    async fn find(&self, id: &Uuid) -> Result<User, RepoError> {
+    async fn find(&self, id: &Uuid) -> Result<User, DomainError> {
         // fake 行為
         Ok(User {
             id: *id,
             name: "Test".to_string(),
         })
     }
-    async fn save(&self, _user: &User) -> Result<(), RepoError> {
+    async fn save(&self, _user: &User) -> Result<(), DomainError> {
         Ok(())
     }
+
+    async fn shutdown(&self) {}
 }
 
 #[tokio::test]
@@ -401,10 +403,11 @@ async fn test_structured_error_response() {
     });
     let registry = prometheus::Registry::new();
     let mock_repo = Arc::new(FakeUserRepository::default());
+    let create_user_uc: Arc<dyn CreateUserUseCase> = Arc::new(UserSvc::new(mock_repo.clone()));
     let app_state = AppState {
         config: test_config.clone(),
         registry: Arc::new(registry),
-        user_repo: mock_repo,
+        create_user_uc,
     };
 
     // ✅ 修正: 複製 main application 的 middleware stack
@@ -435,7 +438,7 @@ async fn test_structured_error_response() {
     let body_json: Value =
         serde_json::from_slice(&body_bytes).expect("Response body should be valid JSON");
 
-    assert_eq!(body_json["error"]["code"], "VALIDATION");
+    assert_eq!(body_json["error"]["code"], "VALIDATION_ERROR");
     assert_eq!(
         body_json["error"]["message"],
         "Validation error: User triggered a bad request"

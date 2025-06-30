@@ -1,7 +1,6 @@
-use application::ports::UserRepository;
+use application::use_cases::create_user::{CreateUserUseCase, HasCreateUserUc};
 use contracts::{HasConfig, HasPort, HasRegistry};
-use std::sync::Arc;
-use crate::shutdown::ShutdownHooks; // Import ShutdownHooks
+use std::sync::Arc; // Import ShutdownHooks
 
 // AppState needs to be Clone, but ShutdownHooks (Vec<Box<dyn ShutdownHookV2>>) is not easily Clone.
 // We can wrap ShutdownHooks in an Arc to make AppState Clone.
@@ -13,8 +12,7 @@ use crate::shutdown::ShutdownHooks; // Import ShutdownHooks
 pub struct AppState {
     pub config: Arc<crate::config::Config>,
     pub registry: Arc<prometheus::Registry>,
-    pub user_repo: Arc<dyn UserRepository>,
-    pub shutdown_hooks: Arc<ShutdownHooks>, // Store hooks in an Arc
+    pub create_user_uc: Arc<dyn CreateUserUseCase>,
 }
 
 impl HasConfig for AppState {
@@ -36,8 +34,8 @@ impl HasPort for AppState {
     }
 }
 
-impl contracts::HasUserRepository for AppState {
-    fn user_repo(&self) -> Arc<dyn UserRepository> {
-        self.user_repo.clone()
+impl HasCreateUserUc for AppState {
+    fn create_user_uc(&self) -> Arc<dyn CreateUserUseCase> {
+        self.create_user_uc.clone()
     }
 }

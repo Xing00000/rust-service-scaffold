@@ -1,6 +1,5 @@
-use serde::{Deserialize, Serialize};
 use domain::user::User as DomainUser; // Alias to avoid confusion
-use uuid::Uuid;
+use serde::{Deserialize, Serialize};
 
 // === Request DTOs ===
 
@@ -8,13 +7,6 @@ use uuid::Uuid;
 pub struct CreateUserRequest {
     pub name: String,
 }
-
-// For path parameters, like /users/{id}
-#[derive(Deserialize, Debug)]
-pub struct GetUserPath {
-    pub id: Uuid, // Axum can parse Uuid from path directly
-}
-
 
 // === Response DTOs ===
 

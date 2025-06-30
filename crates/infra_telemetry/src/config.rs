@@ -54,7 +54,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_default_values() { // Renamed for clarity as from_env is now test-only
+    fn test_default_values() {
+        // Renamed for clarity as from_env is now test-only
         let cfg = TelemetryConfig {
             otel_service_name: "svc".into(),
             otel_exporter_otlp_endpoint: "http://otlp".into(),

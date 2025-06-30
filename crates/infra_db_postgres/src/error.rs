@@ -17,7 +17,10 @@ impl From<DbError> for DomainError {
             DbError::Sqlx(sqlx_err) => {
                 if let Some(db_err) = sqlx_err.as_database_error() {
                     if db_err.is_unique_violation() {
-                        return DomainError::Duplicate(format!("Database unique constraint violation: {}", db_err));
+                        return DomainError::Duplicate(format!(
+                            "Database unique constraint violation: {}",
+                            db_err
+                        ));
                     }
                 }
                 DomainError::Unexpected(format!("Database operation failed: {}", sqlx_err))

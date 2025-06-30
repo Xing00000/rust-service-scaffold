@@ -2,8 +2,8 @@ use async_trait::async_trait;
 
 use uuid::Uuid;
 
-use domain::user::User;
 use domain::error::DomainError;
+use domain::user::User;
 
 //=== Port：UserRepository ===//
 #[async_trait]
@@ -15,8 +15,8 @@ pub trait UserRepository: Send + Sync {
 #[cfg(test)]
 pub mod mock {
     use super::*;
-    use mockall::automock;
-    use domain::error::DomainError; // Added for mock
+    use domain::error::DomainError;
+    use mockall::automock; // Added for mock
 
     #[automock]
     #[async_trait::async_trait]

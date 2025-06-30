@@ -9,12 +9,12 @@ use opentelemetry::{
     KeyValue,
 };
 use opentelemetry_otlp::WithExportConfig;
+
 use opentelemetry_sdk::{metrics::SdkMeterProvider, trace::SdkTracerProvider, Resource};
 use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
 use std::panic::PanicHookInfo;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
-
 /// 使用 Pipeline Builder 初始化 OTLP 追踪器。
 fn init_tracer_provider(
     config: &TelemetryConfig,
