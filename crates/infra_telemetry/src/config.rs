@@ -34,6 +34,8 @@ fn default_log_level() -> String {
 
 impl TelemetryConfig {
     /// 可選：從 env 或 toml 讀取 Telemetry 設定（非強制）
+    /// Marked for test use only to enforce DI for main application flow.
+    #[cfg(test)]
     pub fn from_env() -> Self {
         use std::env;
         TelemetryConfig {
@@ -52,7 +54,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_default_prometheus_path() {
+    fn test_default_values() { // Renamed for clarity as from_env is now test-only
         let cfg = TelemetryConfig {
             otel_service_name: "svc".into(),
             otel_exporter_otlp_endpoint: "http://otlp".into(),
@@ -64,6 +66,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(test)] // This test specifically uses from_env
     fn test_from_env_defaults() {
         // 清理環境變數
         std::env::remove_var("TELEMETRY_SERVICE_NAME");
