@@ -1,0 +1,65 @@
+[package]
+name = "infra_telemetry"
+version = "0.1.0"
+edition = "2021"
+publish = false
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT OR Apache-2.0"
+description = "Infrastructure adapter for telemetry (tracing, OpenTelemetry, Prometheus) in hexagonal Axum architecture."
+repository = "https://github.com/your-username/axum_hexagonal_template"
+
+[lib]
+# 標準 library crate
+
+[dependencies]
+axum = { workspace = true }
+# --- Telemetry 與 Logging ---
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry-semantic-conventions = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+prometheus = { workspace = true }
+
+# --- 基本公用套件 ---
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+# once_cell = { workspace = true } # Not used in this crate's library code
+
+# --- Serde (僅序列化需要, 如有) ---
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# --- Configuration 支援 (如需) ---
+figment = { workspace = true, optional = true }
+dotenvy = { workspace = true, optional = true }
+
+# --- Async Runtime ---
+tokio = { workspace = true, optional = true }
+
+# --- Domain / Application trait 引用（如需）---
+# domain = { path = "../../domain", optional = true }
+application = { path = "../application" } # Added for ObservabilityPort
+async-trait = { workspace = true } # Added for ObservabilityPort impl
+
+[dev-dependencies]
+tracing-futures = { workspace = true }
+reqwest = { workspace = true }
+
+[features]
+default = []
+
+
+[package.metadata]
+# 可選，便於自動化工具掃描
+
+# ===================================================================
+#                     Build Dependencies
+# ===================================================================
+
+[build-dependencies]
+vergen = { version = "8", features = ["build", "git", "gitcl"] }

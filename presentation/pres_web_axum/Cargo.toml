@@ -1,0 +1,59 @@
+[package]
+name = "pres_web_axum"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT OR Apache-2.0"
+description = "Web presentation layer using Axum in hexagonal architecture template"
+repository = "https://github.com/your-username/axum_hexagonal_template"
+readme = "../../README.md"
+
+[dependencies]
+# --- Core ---
+axum = { workspace = true }
+hyper = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tower_governor = { workspace = true }
+tokio = { workspace = true }
+
+# --- Logging & Telemetry ---
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry-semantic-conventions = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+prometheus = { workspace = true }
+
+# --- Serialization & Validation ---
+serde = { workspace = true }
+serde_json = { workspace = true }
+validator = { workspace = true }
+
+# --- Error Handling & Utilities ---
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+once_cell = { workspace = true }
+uuid = { workspace = true }
+
+# --- Workspace Internal Dependencies (domain/application) ---
+contracts = { path = "../../crates/contracts" }
+domain = { path = "../../crates/domain" }
+application = { path = "../../crates/application" }
+# infra_telemetry = { path = "../../crates/infra_telemetry" } # Removed as it's now accessed via ObservabilityPort
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+reqwest = { workspace = true }
+tracing-futures = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+default = []
+
+[package.metadata]
+# 可以補充 CI 規則、編譯器設定等自定義欄位
+[build-dependencies]
+vergen = { version = "8", features = ["build", "git", "gitcl"] }

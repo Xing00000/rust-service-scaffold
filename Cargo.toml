@@ -1,0 +1,141 @@
+# ===================================================================
+#               Workspace Root Cargo.toml
+#
+# This file defines the members of the Rust workspace and sets
+# shared configuration profiles for all crates.
+#
+# All dependency versions are explicitly set based on your provided
+# tested versions to ensure compatibility.
+# ===================================================================
+
+[workspace]
+# Use the new resolver for better dependency management.
+resolver = "2"
+
+# Define all the crates that are part of this workspace.
+# This structure enforces clear separation of concerns and allows
+# for parallel compilation and efficient caching in CI/CD pipelines.
+members = [
+    # --- Application Binary ---
+    "bootstrap",
+
+    # --- Core Library Crates ---
+    "crates/domain",
+    "crates/application",
+
+    # --- Infrastructure Adapters ---
+    # "crates/infra_db_postgres",
+    "crates/infra_telemetry",
+    # "crates/infra_cache_redis", 
+
+    # --- Presentation Layer ---
+    "presentation/pres_web_axum", "crates/contracts", "crates/infra_db_postgres",
+]
+
+# Default package metadata that can be inherited by member crates.
+# Member crates can override these fields if needed.
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["{{ authors }}"] 
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/your-username/{{ project_name }}"
+description = "A production-ready hexagonal architecture template for Rust web services using Axum."
+readme = "README.md"
+keywords = ["axum", "hexagonal", "web", "api", "rust"]
+categories = ["web-programming"]
+
+# Shared dependencies for the entire workspace.
+# This helps to unify versions of common dependencies across all crates.
+# Individual crates will still need to declare their own dependencies,
+# but they will resolve to these versions.
+#
+# All versions are from your provided tested `Cargo.toml`.
+[workspace.dependencies]
+# --- Axum and Web Framework Components ---
+axum = "0.8.4"
+hyper = { version = "1.6.0", default-features = false, features = ["full"] }
+tower = "0.4.13" # Note: Only `util` feature is for dev, but `tower` itself is used more broadly
+tower-http = { version = "0.5.2", default-features = false, features = ["set-header", "request-id", "trace", "fs"] }
+tower_governor = "0.7.0"
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "macros"] }
+
+async-trait = "0.1"
+# --- Async Runtime ---
+tokio = { version = "1", default-features = false, features = ["full"] } # `macros` and `rt-multi-thread` can be specific to dev-dependencies if needed
+
+# --- Logging & Telemetry ---
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", default-features = false, features = ["env-filter", "json", "registry", "fmt"] }
+opentelemetry = { version = "0.28.0", default-features = false, features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.28.0", default-features = false, features = [
+    "rt-tokio",
+    "trace",
+    "metrics",
+] }
+opentelemetry-otlp = { version = "0.28.0", features = ["tonic", "trace"] }
+opentelemetry-semantic-conventions = "0.28.0"
+opentelemetry-prometheus = "0.28.0"
+tracing-opentelemetry = "0.29.0"
+prometheus = { version = "0.13.3", default-features = false, features = ["process"] }
+
+# --- Error Handling ---
+thiserror = "1.0.58"
+anyhow = "1.0.80" # Assuming a recent stable version since not specified, can be adjusted.
+
+# --- Serialization & Validation ---
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
+serde_json = "1.0.115"
+validator = { version = "0.18", default-features = false, features = ["derive"] }
+
+# --- Configuration ---
+figment = { version = "0.10", default-features = false, features = ["toml", "env"] }
+dotenvy = "0.15"
+
+# --- Utilities ---
+once_cell = "1.19.0" # While advised against in domain, it might be useful in infra/presentation
+uuid = { version = "1.8.0", features = ["v7", "fast-rng"] } # Typically default features are fine or it's small.
+# --- Dev Dependencies (used in main for tests, or by specific test crates) ---
+reqwest = { version = "0.12.20", default-features = false, features = ["json"] }
+tracing-futures = "0.2"
+vergen = { version = "8", default-features = false, features = ["build", "git", "gitcl"] }
+mockall = "0.12"
+# ===================================================================
+#                    Build Profiles
+# ===================================================================
+
+# Development profile (used for `cargo build` and `cargo run`)
+[profile.dev]
+opt-level = 0
+debug = true
+split-debuginfo = "packed" # Faster linking on some platforms
+rpath = false
+
+
+# Release profile (used for `cargo build --release`)
+[profile.release]
+opt-level = 3      # Optimize for speed
+lto = "fat"        # Enable Link-Time Optimization for better performance
+codegen-units = 1  # Slower to compile, but produces faster code
+panic = "abort"    # Abort on panic for smaller binary size and predictability
+strip = true       # Strip symbols from the binary to reduce size
+
+# Test profile (used for `cargo test`)
+[profile.test]
+opt-level = 1
+debug = true
+
+# Benchmark profile (used for `cargo bench`)
+[profile.bench]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+
+[workspace.lints.rust]
+# 這裡的 key 就是 lint group / lint name  
+# value 可以是 "allow" | "warn" | "deny" | "forbid"
+unused = "deny"
+rust_2018_idioms = "deny"
+unused_imports = "deny"
+
+# …依照喜好補

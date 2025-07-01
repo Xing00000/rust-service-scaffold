@@ -1,0 +1,22 @@
+# `cargo-generate` 設定檔
+
+[template]
+# 模板生成後要執行的命令。
+# 這裡我們在生成後顯示一些友善的提示。
+hooks = ["{{- project-name -}}/hooks/post_gen_hook.sh"]
+
+[vars]
+# 定義專案名稱變數
+# `type` 是 string，`prompt` 是互動式提示文字，`default` 是預設值
+project_name = { type = "string", prompt = "What is the name of your new project?", default = "my-awesome-axum-app" }
+
+# 作者資訊，預設會嘗試從 cargo config 或 git config 讀取
+authors = { type = "string", prompt = "Enter author name and email <NAME ...>", default = "Your Name <your.email@example.com>" }
+
+# 資料庫設定，這些變數將被用在 `config/default.toml` 中
+db_user = { type = "string", prompt = "Database user name", default = "myuser" }
+db_password = { type = "string", prompt = "Database user password", default = "mypassword", private = true } # private=true 表示這是一個敏感值
+
+[hooks]
+# 預留的 hook 設定，可以在生成前後執行腳本
+# post = ["./hooks/post-gen.sh"] # 例如

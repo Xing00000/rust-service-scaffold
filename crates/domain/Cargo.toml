@@ -1,0 +1,40 @@
+# axum_hexagonal_template/crates/domain/Cargo.toml
+
+[package]
+name = "domain"
+version = "0.1.0"
+edition = "2021"
+publish = false # Prevent accidental publishing
+authors = ["Your Name <your.email@example.com>"] # 建議填寫你的名字和郵箱
+description = "Contains core business logic, entities, and domain-specific errors. It should be pure and framework-agnostic."
+repository = "https://github.com/your-username/axum_hexagonal_template" # 建議填寫你的項目倉庫
+license = "MIT OR Apache-2.0" # 選擇一個合適的開源許可證，或移除
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+# `thiserror` 用於定義結構化的、符合 Rust 慣例的錯誤類型
+thiserror = { workspace = true }
+
+# `uuid` 用於生成全域唯一標識符，特別是 UUIDv7
+# 關閉 "serde" 特性以避免 Domain 層直接依賴序列化/反序列化實現細節。
+# 如果需要在 Domain 層的實體上使用 UUID，但又想保持純粹，可以將 UUID 轉換為 String 或 [u8] 存儲。
+# 實際的 serde 處理應發生在 presentation 或 infrastructure 層的 DTOs。
+# `v7` 特性啟用 UUIDv7 的生成，該版本是基於時間的且可排序，對資料庫索引友好。
+# `fast-rng` 啟用更快的隨機數生成器。
+uuid = { workspace = true }
+
+# `itertools` 提供了一些方便的迭代器適配器和實用函數，通常是純運算。
+# 根據實際需要選擇是否包含。
+# itertools = "0.12.0"
+
+# `chrono` 用於處理時間，但如果 Domain 只需 Unix timestamp 或 Duration，
+# 考慮使用更輕量級的 `time` crate 或直接 `u64`。
+# 如果確定 Domain 需要處理日期時間物件，且不介意其大小，則可以包含。
+# chrono = { version = "0.4.34", features = ["serde"] } # 建議關閉 serde，如果需要序列化，在 DTOs 層處理
+
+# 如果 Domain 層需要任何其他純計算、無副作用、無 I/O 的數學或資料結構庫，可以在此添加。
