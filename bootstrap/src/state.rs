@@ -1,6 +1,7 @@
+use application::ports::DynObs; // Added for Observability
 use application::use_cases::create_user::{CreateUserUseCase, HasCreateUserUc};
 use contracts::{HasConfig, HasPort, HasRegistry};
-use std::sync::Arc; // Import ShutdownHooks
+use std::sync::Arc;
 
 // AppState needs to be Clone, but ShutdownHooks (Vec<Box<dyn ShutdownHookV2>>) is not easily Clone.
 // We can wrap ShutdownHooks in an Arc to make AppState Clone.
@@ -13,6 +14,18 @@ pub struct AppState {
     pub config: Arc<crate::config::Config>,
     pub registry: Arc<prometheus::Registry>,
     pub create_user_uc: Arc<dyn CreateUserUseCase>,
+    pub obs_port: DynObs, // Added ObservabilityPort
+}
+
+// Trait for accessing ObservabilityPort
+pub trait HasObservability {
+    fn obs_port(&self) -> DynObs;
+}
+
+impl HasObservability for AppState {
+    fn obs_port(&self) -> DynObs {
+        self.obs_port.clone()
+    }
 }
 
 impl HasConfig for AppState {

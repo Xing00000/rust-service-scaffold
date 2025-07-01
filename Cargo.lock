@@ -1060,6 +1060,8 @@ name = "infra_telemetry"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "application",
+ "async-trait",
  "axum",
  "dotenvy",
  "figment",
@@ -1668,7 +1670,6 @@ dependencies = [
  "contracts",
  "domain",
  "hyper",
- "infra_telemetry",
  "once_cell",
  "opentelemetry",
  "opentelemetry-otlp",

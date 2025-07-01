@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::Instant;
 
 use axum::body::Body;
@@ -7,12 +6,11 @@ use axum::http::Request;
 use axum::middleware::Next;
 use axum::response::IntoResponse;
 use axum::Extension;
+use application::ports::DynObs; // Added for ObservabilityPort
 
-use infra_telemetry::metrics::Metrics; // Updated path
-
-// 把 Metrics 傳進來 (可透過 extension or app_state)
+// 把 ObservabilityPort trait object 傳進來 (可透過 extension or app_state)
 pub async fn axum_metrics_middleware(
-    Extension(metrics): Extension<Arc<Metrics>>,
+    Extension(obs): Extension<DynObs>, // Changed to use DynObs
     req: Request<Body>,
     next: Next,
 ) -> impl IntoResponse {
@@ -24,7 +22,8 @@ pub async fn axum_metrics_middleware(
         .map(|m| m.as_str().to_owned())
         .unwrap_or_else(|| req.uri().path().to_owned());
 
-    metrics.on_request_start(&method, &path);
+    // Use the ObservabilityPort trait object
+    obs.on_request_start(&method, &path).await;
 
     let start = Instant::now();
 
@@ -34,7 +33,8 @@ pub async fn axum_metrics_middleware(
     let latency = start.elapsed().as_secs_f64();
     let status = response.status().as_u16();
 
-    metrics.on_request_end(&method, &path, status, latency);
+    // Use the ObservabilityPort trait object
+    obs.on_request_end(&method, &path, status, latency).await;
 
     response
 }

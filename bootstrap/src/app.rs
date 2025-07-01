@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::state::AppState;
+use application::ports::DynObs; // Added for ObservabilityPort
 use application::use_cases::create_user::{CreateUserUseCase, UserSvc};
 use axum::{middleware, routing::get, Router};
 use hyper::header::{HeaderName, HeaderValue};
@@ -40,10 +41,14 @@ impl Application {
         let user_repo: Arc<dyn application::ports::UserRepository> = Arc::new(user_repo_impl);
         let create_user_uc: Arc<dyn CreateUserUseCase> = Arc::new(UserSvc::new(user_repo.clone()));
 
+        // Instantiate metrics before AppState
+        let metrics: DynObs = Arc::new(Metrics::new());
+
         let app_state = AppState {
             config: Arc::new(config.clone()), // Clone config for app_state
             registry: Arc::new(registry),
             create_user_uc,
+            obs_port: metrics.clone(), // Add metrics to AppState
         };
 
         // Configure Governor for rate limiting using values from Config
@@ -54,9 +59,9 @@ impl Application {
                 .finish()
                 .unwrap(),
         );
-        let metrics = Arc::new(Metrics::new());
+        // let metrics: DynObs = Arc::new(Metrics::new()); // Metrics is now initialized before AppState and cloned from there or AppState.obs_port()
         let common_layers = ServiceBuilder::new()
-            .layer(axum::extract::Extension(metrics.clone())) // 最外層
+            .layer(axum::extract::Extension(app_state.obs_port.clone())) // Use obs_port from AppState
             .layer(middleware::from_fn(
                 telemetry_middleware::axum_metrics_middleware,
             ))

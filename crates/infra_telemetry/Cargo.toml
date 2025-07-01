@@ -43,7 +43,8 @@ tokio = { workspace = true, optional = true }
 
 # --- Domain / Application trait 引用（如需）---
 # domain = { path = "../../domain", optional = true }
-# application = { path = "../../application", optional = true }
+application = { path = "../application" } # Added for ObservabilityPort
+async-trait = { workspace = true } # Added for ObservabilityPort impl
 
 [dev-dependencies]
 tracing-futures = { workspace = true }

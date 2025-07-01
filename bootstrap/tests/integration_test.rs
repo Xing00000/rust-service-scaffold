@@ -30,7 +30,53 @@ use async_trait::async_trait;
 use hyper::{Request, StatusCode};
 use once_cell::sync::Lazy;
 use uuid::Uuid;
+
+// For FakeObs
+use application::ports::{DynObs, ObservabilityPort};
+use axum::middleware;
+use pres_web_axum::middleware::telemetry_middleware;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+#[derive(Clone, Default)]
+struct FakeObs {
+    request_start_calls: Arc<AtomicUsize>,
+    request_end_calls: Arc<AtomicUsize>,
+}
+
+impl FakeObs {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    #[allow(dead_code)] // Potentially used in future assertions
+    fn get_request_start_calls(&self) -> usize {
+        self.request_start_calls.load(Ordering::SeqCst)
+    }
+
+    #[allow(dead_code)] // Potentially used in future assertions
+    fn get_request_end_calls(&self) -> usize {
+        self.request_end_calls.load(Ordering::SeqCst)
+    }
+
+    #[allow(dead_code)] // Potentially used in future assertions
+    fn reset_counts(&self) {
+        self.request_start_calls.store(0, Ordering::SeqCst);
+        self.request_end_calls.store(0, Ordering::SeqCst);
+    }
+}
+
+#[async_trait]
+impl ObservabilityPort for FakeObs {
+    async fn on_request_start(&self, _method: &str, _path: &str) {
+        self.request_start_calls.fetch_add(1, Ordering::SeqCst);
+    }
+
+    async fn on_request_end(&self, _method: &str, _path: &str, _status: u16, _latency: f64) {
+        self.request_end_calls.fetch_add(1, Ordering::SeqCst);
+    }
+}
 
 #[derive(Clone, Default)]
 struct TestWriter {
@@ -404,19 +450,34 @@ async fn test_structured_error_response() {
     let registry = prometheus::Registry::new();
     let mock_repo = Arc::new(FakeUserRepository::default());
     let create_user_uc: Arc<dyn CreateUserUseCase> = Arc::new(UserSvc::new(mock_repo.clone()));
+
+    let fake_obs_instance = Arc::new(FakeObs::new());
+    let obs_port_for_app_state: DynObs = fake_obs_instance.clone(); // Clone for AppState
+    let obs_port_for_extension: DynObs = fake_obs_instance.clone(); // Clone for Extension layer
+
     let app_state = AppState {
         config: test_config.clone(),
         registry: Arc::new(registry),
         create_user_uc,
+        obs_port: obs_port_for_app_state, // Add FakeObs to AppState
     };
 
     // ✅ 修正: 複製 main application 的 middleware stack
     // 這樣可以確保 `RequestId` extension 在 handler 中可用。
+    // AND adding telemetry middleware with FakeObs
     let app = Router::new()
         .route("/", get(handlers::main_handler::<AppState>))
-        .layer(PropagateRequestIdLayer::x_request_id())
-        .layer(TraceLayer::new_for_http())
-        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+        .layer(
+            // Layers from common_layers in app.rs, adapted for test
+            tower::ServiceBuilder::new()
+                .layer(axum::extract::Extension(obs_port_for_extension)) // Inject FakeObs via Extension
+                .layer(middleware::from_fn(
+                    telemetry_middleware::axum_metrics_middleware,
+                ))
+                .layer(TraceLayer::new_for_http())
+                .layer(PropagateRequestIdLayer::x_request_id())
+                .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid)), // Removed GovernorLayer for simplicity in this test
+        )
         .with_state(app_state);
 
     // Act
@@ -443,6 +504,10 @@ async fn test_structured_error_response() {
         body_json["error"]["message"],
         "Validation error: User triggered a bad request"
     );
+
+    // Assert FakeObs calls
+    assert_eq!(fake_obs_instance.get_request_start_calls(), 1, "on_request_start should have been called once");
+    assert_eq!(fake_obs_instance.get_request_end_calls(), 1, "on_request_end should have been called once");
 }
 
 // Test for rate limiting

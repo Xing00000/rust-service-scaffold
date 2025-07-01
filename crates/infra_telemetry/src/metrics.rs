@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use opentelemetry::{
     global,
     metrics::{Counter, Histogram},
@@ -52,5 +53,20 @@ impl Metrics {
 impl Default for Metrics {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[async_trait]
+impl application::ports::ObservabilityPort for Metrics {
+    async fn on_request_start(&self, method: &str, path: &str) {
+        // Call the existing synchronous method.
+        // In a real-world scenario, if the underlying metrics library supported async,
+        // we might make this method async. For now, we wrap the sync call.
+        Metrics::on_request_start(self, method, path);
+    }
+
+    async fn on_request_end(&self, method: &str, path: &str, status: u16, latency: f64) {
+        // Call the existing synchronous method.
+        Metrics::on_request_end(self, method, path, status, latency);
     }
 }

@@ -43,7 +43,7 @@ uuid = { workspace = true }
 contracts = { path = "../../crates/contracts" }
 domain = { path = "../../crates/domain" }
 application = { path = "../../crates/application" }
-infra_telemetry = { path = "../../crates/infra_telemetry" }
+# infra_telemetry = { path = "../../crates/infra_telemetry" } # Removed as it's now accessed via ObservabilityPort
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 reqwest = { workspace = true }
