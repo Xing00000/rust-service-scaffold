@@ -506,8 +506,16 @@ async fn test_structured_error_response() {
     );
 
     // Assert FakeObs calls
-    assert_eq!(fake_obs_instance.get_request_start_calls(), 1, "on_request_start should have been called once");
-    assert_eq!(fake_obs_instance.get_request_end_calls(), 1, "on_request_end should have been called once");
+    assert_eq!(
+        fake_obs_instance.get_request_start_calls(),
+        1,
+        "on_request_start should have been called once"
+    );
+    assert_eq!(
+        fake_obs_instance.get_request_end_calls(),
+        1,
+        "on_request_end should have been called once"
+    );
 }
 
 // Test for rate limiting

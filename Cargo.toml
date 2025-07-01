@@ -37,9 +37,9 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["{{ authors }}"] 
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/your-username/axum_hexagonal_template"
+repository = "https://github.com/your-username/{{ project_name }}"
 description = "A production-ready hexagonal architecture template for Rust web services using Axum."
 readme = "README.md"
 keywords = ["axum", "hexagonal", "web", "api", "rust"]
