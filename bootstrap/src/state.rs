@@ -1,4 +1,4 @@
-use application::{Container, HasCreateUserUc};
+use application::{Container, HasCreateUserUc, HasObservability};
 use contracts::ports::MetricsRegistry;
 use std::sync::Arc;
 
@@ -18,5 +18,11 @@ impl MetricsRegistry for AppState {
 impl application::use_cases::create_user::HasCreateUserUc for AppState {
     fn create_user_uc(&self) -> Arc<dyn application::use_cases::create_user::CreateUserUseCase> {
         self.container.create_user_uc()
+    }
+}
+
+impl HasObservability for AppState {
+    fn observability(&self) -> contracts::ports::DynObservability {
+        self.container.observability()
     }
 }

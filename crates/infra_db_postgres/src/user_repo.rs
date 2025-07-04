@@ -26,7 +26,7 @@ impl UserRepository for PostgresUserRepository {
         let row: UserRow = sqlx::query_as!(UserRow, "SELECT id, name FROM users WHERE id = $1", id)
             .fetch_one(&self.pool)
             .await
-            .map_err(DbError::from)?; // Convert sqlx::Error -> DbError -> DomainError
+            .map_err(|e| DomainError::from(DbError::from(e)))?;
         Ok(User {
             id: row.id,
             name: row.name,
@@ -42,7 +42,7 @@ impl UserRepository for PostgresUserRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(DbError::from)?; // Convert sqlx::Error -> DbError -> DomainError
+        .map_err(|e| DomainError::from(DbError::from(e)))?;
         Ok(())
     }
 

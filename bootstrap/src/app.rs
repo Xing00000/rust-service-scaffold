@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::factory::DependencyFactory;
 use crate::state::AppState;
+use application::HasObservability;
 use axum::{middleware, routing::get, Router};
 use hyper::header::{HeaderName, HeaderValue};
 use infra_telemetry::{config::TelemetryConfig, telemetry};
@@ -54,7 +55,7 @@ impl Application {
         );
         let common_layers = ServiceBuilder::new()
             .layer(axum::extract::Extension(
-                app_state.container.observability.clone(),
+                app_state.container.observability(),
             ))
             .layer(middleware::from_fn(
                 telemetry_middleware::axum_metrics_middleware,
