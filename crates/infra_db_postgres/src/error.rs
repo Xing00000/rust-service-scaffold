@@ -1,4 +1,4 @@
-use domain::error::DomainError;
+use contracts::ports::DomainError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

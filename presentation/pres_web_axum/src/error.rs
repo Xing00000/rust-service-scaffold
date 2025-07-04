@@ -1,6 +1,6 @@
 use application::error::AppError;
 use axum::{http::StatusCode, response::IntoResponse, Json};
-use domain::error::DomainError;
+use contracts::ports::DomainError;
 use serde::Serialize;
 
 #[derive(Debug)]

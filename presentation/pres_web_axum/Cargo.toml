@@ -39,9 +39,8 @@ anyhow = { workspace = true }
 once_cell = { workspace = true }
 uuid = { workspace = true }
 
-# --- Workspace Internal Dependencies (domain/application) ---
+# --- Workspace Internal Dependencies ---
 contracts = { path = "../../crates/contracts" }
-domain = { path = "../../crates/domain" }
 application = { path = "../../crates/application" }
 # infra_telemetry = { path = "../../crates/infra_telemetry" } # Removed as it's now accessed via ObservabilityPort
 [dev-dependencies]

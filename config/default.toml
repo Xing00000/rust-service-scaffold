@@ -15,7 +15,7 @@ rate_limit_per_second = 1
 rate_limit_burst_size = 50
 
 # Database Configuration
-database_url = "postgres://{{ db_user }}:{{ db_password }}@localhost:5432/{{ project_name }}"
+database_url = "postgres://myuser:mypassword@localhost:5432/mydb"
 db_max_conn = 5
 
 # HTTP Headers

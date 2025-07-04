@@ -5,8 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-domain = { path = "../domain" }
-application = { path = "../application" }
+contracts = { path = "../contracts" }
 sqlx = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }

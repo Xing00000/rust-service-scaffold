@@ -1,8 +1,7 @@
 use crate::error::DbError;
 use crate::models::UserRow;
-use application::ports::UserRepository; // RepoError removed
 use async_trait::async_trait;
-use domain::{error::DomainError, user::User}; // Added
+use contracts::ports::{DomainError, User, UserRepository};
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 use uuid::Uuid;
 

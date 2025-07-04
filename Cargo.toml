@@ -29,7 +29,9 @@ members = [
     # "crates/infra_cache_redis", 
 
     # --- Presentation Layer ---
-    "presentation/pres_web_axum", "crates/contracts", "crates/infra_db_postgres",
+    "presentation/pres_web_axum", 
+    "crates/contracts", 
+    "crates/infra_db_postgres",
 ]
 
 # Default package metadata that can be inherited by member crates.

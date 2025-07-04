@@ -16,8 +16,7 @@ path = "src/lib.rs"
 workspace = true
 
 [dependencies]
-contracts = { path = "../contracts" } # 依賴於 contracts 層，這是 Application 層唯一會直接依賴的抽象層
-# 依賴於 Domain 層，這是 Application 層唯一會直接依賴的業務邏輯層
+contracts = { path = "../contracts", features = ["testing"] }
 domain = { path = "../domain" }
 
 
@@ -36,3 +35,4 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 mockall = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

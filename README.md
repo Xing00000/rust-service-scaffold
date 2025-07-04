@@ -82,59 +82,257 @@ make test
 
 本專案採用嚴格的六邊形架構，依賴關係永遠是**從外向內**。
 
-```
-Presentation / Infrastructure --> Application --> Domain
+```mermaid
+graph TB
+    subgraph "Presentation Layer"
+        WEB["Web API (Axum)"]
+        CLI["CLI Interface"]
+    end
+    
+    subgraph "Infrastructure Layer"
+        DB["PostgreSQL Adapter"]
+        METRICS["Telemetry Adapter"]
+        CACHE["Cache Adapter"]
+    end
+    
+    subgraph "Application Layer"
+        UC["Use Cases"]
+        PORTS["Ports (Interfaces)"]
+        CONTAINER["DI Container"]
+    end
+    
+    subgraph "Contracts Layer"
+        IFACES["Unified Interfaces"]
+        TYPES["Shared Types"]
+    end
+    
+    subgraph "Domain Layer"
+        ENTITIES["Business Entities"]
+        LOGIC["Business Logic"]
+        ERRORS["Domain Errors"]
+    end
+    
+    subgraph "Bootstrap Layer"
+        FACTORY["Dependency Factory"]
+        CONFIG["Configuration"]
+        MAIN["Application Entry"]
+    end
+    
+    %% Dependencies (outer to inner)
+    WEB --> UC
+    CLI --> UC
+    DB --> PORTS
+    METRICS --> PORTS
+    CACHE --> PORTS
+    
+    UC --> ENTITIES
+    PORTS --> IFACES
+    CONTAINER --> UC
+    
+    IFACES --> ENTITIES
+    TYPES --> ENTITIES
+    
+    FACTORY --> CONTAINER
+    FACTORY --> DB
+    FACTORY --> METRICS
+    CONFIG --> FACTORY
+    MAIN --> FACTORY
+    
+    classDef domain fill:#e1f5fe
+    classDef application fill:#f3e5f5
+    classDef infrastructure fill:#fff3e0
+    classDef presentation fill:#e8f5e8
+    classDef contracts fill:#fce4ec
+    classDef bootstrap fill:#f1f8e9
+    
+    class ENTITIES,LOGIC,ERRORS domain
+    class UC,PORTS,CONTAINER application
+    class DB,METRICS,CACHE infrastructure
+    class WEB,CLI presentation
+    class IFACES,TYPES contracts
+    class FACTORY,CONFIG,MAIN bootstrap
 ```
 
-- **Domain**: 核心業務邏輯和實體。最純淨的一層，不依賴任何外部框架。
-- **Application**: 應用程式的用例 (Use Cases) 和端口 (Ports)。定義了應用「做什麼」，但不關心「如何做」。
-- **Infrastructure**: 外部系統的具體實現 (Adapters)，如資料庫、快取、消息隊列。實現 Application 層定義的端口。
-- **Presentation**: 對外暴露的介面 (Driving Adapters)，如 REST API、gRPC 或 CLI。
+### 🎯 架構層級說明
 
-這種結構確保了核心業務邏輯的獨立性和可測試性，使得替換任何外部依賴（如 Web 框架或資料庫）都變得相對容易。
+- **Domain**: 核心業務邏輯和實體，完全獨立，無外部依賴
+- **Contracts**: 統一的端口定義和共享類型，連接各層的抽象
+- **Application**: 用例實現和依賴注入容器，協調業務流程
+- **Infrastructure**: 外部系統適配器（資料庫、監控等）
+- **Presentation**: 對外介面（REST API、CLI 等）
+- **Bootstrap**: 應用程式組裝和啟動邏輯
+
+### 🔄 依賴注入流程
+
+```mermaid
+sequenceDiagram
+    participant Main as Bootstrap::Main
+    participant Factory as DependencyFactory
+    participant Container as Application::Container
+    participant UseCase as Use Cases
+    participant Adapter as Infrastructure
+    
+    Main->>Factory: create_container(config)
+    Factory->>Adapter: create adapters
+    Factory->>Container: new(adapters)
+    Container->>UseCase: inject dependencies
+    Main->>+Container: start application
+```
 
 ## 📁 目錄結構
 
 ```text
-hexagonal_template/
-├── Cargo.toml            # Workspace 根配置
-├── Makefile              # 開發自動化命令
-├── scripts/              # 常用腳本
+rust-service-scaffold/
+├── Cargo.toml                    # Workspace 根配置
+├── Makefile                      # 開發自動化命令
+├── docker-compose.yml            # 開發環境依賴
 │
-├── crates/               # 核心 Library Crates
-│   ├── domain/           # 核心業務邏輯、實體 (Entities)
-│   ├── application/      # 用例 (Use Cases)、端口 (Ports)
-│   ├── infra_db_postgres/# PostgreSQL 適配器
-│   ├── infra_telemetry/  # 可觀測性 (日誌/指標/追踪) 適配器
-│   └── ...               # 其他基礎設施適配器
+├── crates/                       # 核心 Library Crates
+│   ├── contracts/                # 🔗 統一端口定義層
+│   │   ├── src/ports.rs         # 所有抽象介面
+│   │   └── src/error.rs         # 共享錯誤類型
+│   ├── domain/                   # 🏛️ 領域層 (最內層)
+│   │   ├── src/user.rs          # 業務實體
+│   │   └── src/error.rs         # 領域錯誤
+│   ├── application/              # 🎯 應用層
+│   │   ├── src/use_cases/       # 用例實現
+│   │   ├── src/container.rs     # 依賴注入容器
+│   │   └── src/error.rs         # 應用錯誤
+│   ├── infra_db_postgres/        # 🗄️ 資料庫適配器
+│   └── infra_telemetry/          # 📊 監控適配器
 │
-├── presentation/         # 對外介面層
-│   └── pres_web_axum/    # Axum Web API 的實現 (Handlers/Router/DTOs)
+├── presentation/                 # 🌐 表現層
+│   └── pres_web_axum/           # Axum Web API
+│       ├── src/handlers.rs      # HTTP 處理器
+│       ├── src/dtos.rs          # 資料傳輸物件
+│       └── src/middleware/      # 中介軟體
 │
-├── app/                  # Binary Crate (可執行檔)
-│   └── src/main.rs       # 應用程式組裝點 (Composition Root)
+├── bootstrap/                    # 🚀 啟動層
+│   ├── src/main.rs              # 應用程式入口
+│   ├── src/factory.rs           # 依賴工廠
+│   ├── src/config.rs            # 配置管理
+│   └── tests/                   # 整合測試
 │
-├── config/               # 預設設定檔 (e.g., default.toml)
-│
-└── tests/                # 跨 Crate 的整合與端到端測試
+└── config/                       # ⚙️ 配置檔案
+    └── default.toml             # 預設配置
 ```
 
 ## 🧪 測試策略
 
-我們採用分層的測試策略，以確保程式碼品質和開發效率：
+採用分層測試策略，確保各層獨立可測：
 
-1.  **單元測試 (`#[cfg(test)]`)**:
+```mermaid
+pyramid
+    title Test Pyramid
+    
+    "E2E Tests" : 5
+    "Integration Tests" : 15  
+    "Unit Tests" : 80
+```
 
-    - **位置**: 在各個 crate 的 `src/` 目錄下。
-    - **目標**: 測試單一模組或函數的邏輯，速度快，無 I/O。使用 mock 或 fake 物件來模擬依賴。
+### 測試層級
 
-2.  **整合測試 (頂層 `tests/` 目錄)**:
+1. **單元測試** (`#[cfg(test)]`)
+   - **Domain**: 純業務邏輯測試
+   - **Application**: 使用 Mock 測試用例
+   - **Infrastructure**: 適配器邏輯測試
 
-    - **位置**: 專案根目錄下的 `tests/`。
-    - **目標**: 測試 crate 之間的協作和公開 API 的行為。這些測試像外部用戶一樣調用 crate。
+2. **整合測試** (`bootstrap/tests/`)
+   - HTTP API 端到端測試
+   - 錯誤處理測試
+   - 中介軟體測試
 
-3.  **端到端測試 (E2E)**:
-    - 整合測試的一種，會啟動完整的應用程式（或其輕量版本）和真實的外部依賴（如資料庫），來模擬真實的用戶場景。
+3. **契約測試**
+   - Mock 自動生成 (`mockall`)
+   - 端口介面驗證
+
+### 執行測試
+
+```bash
+# 執行所有測試
+cargo test
+
+# 執行特定層級測試
+cargo test -p application  # 應用層測試
+cargo test -p domain      # 領域層測試
+
+# 執行整合測試
+cargo test --test integration_test
+```
+
+## 🔄 重構成果
+
+本專案已經過完整的六邊形架構重構，主要改進包括：
+
+### 🎯 架構改進
+
+| 項目 | 重構前 | 重構後 |
+|------|--------|--------|
+| 端口定義 | 分散在各層 | 統一在 `contracts` |
+| 依賴注入 | 手動組裝 | 工廠模式 + 容器 |
+| 測試支援 | 不完整 | Mock + 單元測試 |
+| 依賴方向 | 部分違反 | 嚴格遵循 |
+
+### 🔗 新增 Contracts 層
+
+統一管理所有抽象介面：
+
+```rust
+// contracts/src/ports.rs
+pub trait UserRepository: Send + Sync {
+    async fn find(&self, id: &Uuid) -> Result<User, DomainError>;
+    async fn save(&self, user: &User) -> Result<(), DomainError>;
+}
+
+pub trait ObservabilityPort: Send + Sync {
+    async fn on_request_start(&self, method: &str, path: &str);
+    async fn on_request_end(&self, method: &str, path: &str, status: u16, latency: f64);
+}
+```
+
+### 🏠 依賴注入容器
+
+統一管理所有依賴：
+
+```rust
+// application/src/container.rs
+pub struct Container {
+    pub user_repo: DynUserRepo,
+    pub observability: DynObservability,
+    pub create_user_uc: Arc<dyn CreateUserUseCase>,
+}
+```
+
+### 🏭 依賴工廠
+
+負責組裝所有依賴：
+
+```rust
+// bootstrap/src/factory.rs
+impl DependencyFactory {
+    pub async fn create_container(config: &Config) -> Result<Container, Error> {
+        let user_repo = Self::create_user_repository(config).await?;
+        let observability = Self::create_observability();
+        Ok(Container::new(user_repo, observability))
+    }
+}
+```
+
+### 🧪 測試改進
+
+完整的 Mock 測試支援：
+
+```rust
+#[tokio::test]
+async fn test_create_user_success() {
+    let mut mock_repo = MockUserRepository::new();
+    mock_repo.expect_save().returning(|_| Box::pin(async { Ok(()) }));
+    
+    let use_case = UserSvc::new(Arc::new(mock_repo));
+    let result = use_case.exec(cmd).await;
+    assert!(result.is_ok());
+}
+```
 
 ## 🔧 配置 (Configuration)
 
@@ -147,13 +345,48 @@ hexagonal_template/
 
 所有可配置的選項都在 `app/src/config.rs` 中定義。
 
+## 🔧 開發指南
+
+### 新增功能流程
+
+1. **定義端口** - 在 `contracts/src/ports.rs` 添加抽象介面
+2. **實現領域邏輯** - 在 `domain/` 添加業務實體和邏輯
+3. **創建用例** - 在 `application/src/use_cases/` 實現業務流程
+4. **實現適配器** - 在 `infra_*/` 實現具體技術細節
+5. **添加 API** - 在 `presentation/` 暴露對外介面
+6. **更新工廠** - 在 `bootstrap/src/factory.rs` 組裝依賴
+
+### 程式碼品質檢查
+
+```bash
+# 格式化程式碼
+cargo fmt
+
+# 靜態分析
+cargo clippy --all-targets -- -D warnings
+
+# 執行測試
+cargo test
+
+# 檢查依賴
+cargo check
+```
+
+### 架構原則
+
+- ✅ **依賴方向**: 永遠從外向內
+- ✅ **端口優先**: 先定義抽象，再實現具體
+- ✅ **測試驅動**: 每個用例都有對應測試
+- ✅ **單一職責**: 每層只關心自己的職責
+
 ## 📜 貢獻 (Contributing)
 
-歡迎提交 Pull Requests！為了保持程式碼品質，請確保：
+歡迎提交 Pull Requests！請確保：
 
-- 你的程式碼通過了 `cargo clippy --all-targets -- -D warnings` 的檢查。
-- 你的程式碼通過了 `cargo fmt` 的格式化。
-- 所有現有測試都能通過，並為新功能添加了適當的測試。
+- 遵循六邊形架構原則
+- 通過所有品質檢查
+- 添加適當的測試覆蓋
+- 更新相關文件
 
 ## 📄 授權 (License)
 
@@ -181,3 +414,6 @@ docker run --name my-postgres \
 export DATABASE_URL="postgres://myuser:mypassword@localhost:5432/mydb"
 
 psql postgres://myuser:mypassword@localhost:5432/mydb -c '\dt'
+
+
+

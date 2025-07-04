@@ -4,7 +4,7 @@ use bootstrap::{
     state::AppState,
 };
 
-use domain::{error::DomainError, user::User};
+use contracts::ports::{DomainError, User};
 use infra_telemetry::telemetry;
 use pres_web_axum::handlers;
 use serde_json::Value;
@@ -25,15 +25,15 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
 use application::use_cases::create_user::{CreateUserUseCase, UserSvc};
 use axum::body::{to_bytes, Body};
 
-use application::ports::UserRepository;
 use async_trait::async_trait;
+use contracts::ports::UserRepository;
 use hyper::{Request, StatusCode};
 use once_cell::sync::Lazy;
 use uuid::Uuid;
 
 // For FakeObs
-use application::ports::{DynObs, ObservabilityPort};
 use axum::middleware;
+use contracts::ports::{DynObservability, ObservabilityPort};
 use pres_web_axum::middleware::telemetry_middleware;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -449,17 +449,21 @@ async fn test_structured_error_response() {
     });
     let registry = prometheus::Registry::new();
     let mock_repo = Arc::new(FakeUserRepository::default());
-    let create_user_uc: Arc<dyn CreateUserUseCase> = Arc::new(UserSvc::new(mock_repo.clone()));
+    let _create_user_uc: Arc<dyn CreateUserUseCase> = Arc::new(UserSvc::new(mock_repo.clone()));
 
     let fake_obs_instance = Arc::new(FakeObs::new());
-    let obs_port_for_app_state: DynObs = fake_obs_instance.clone(); // Clone for AppState
-    let obs_port_for_extension: DynObs = fake_obs_instance.clone(); // Clone for Extension layer
+    let _obs_port_for_app_state: DynObservability = fake_obs_instance.clone(); // Clone for AppState
+    let obs_port_for_extension: DynObservability = fake_obs_instance.clone(); // Clone for Extension layer
+
+    let container = application::Container::new(
+        Arc::new(FakeUserRepository::default()),
+        fake_obs_instance.clone(),
+    );
 
     let app_state = AppState {
         config: test_config.clone(),
         registry: Arc::new(registry),
-        create_user_uc,
-        obs_port: obs_port_for_app_state, // Add FakeObs to AppState
+        container: Arc::new(container),
     };
 
     // ✅ 修正: 複製 main application 的 middleware stack

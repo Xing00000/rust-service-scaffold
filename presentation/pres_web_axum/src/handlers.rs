@@ -1,6 +1,6 @@
 use application::error::AppError;
 
-use application::use_cases::create_user::{CreateUserCmd, HasCreateUserUc};
+use application::use_cases::create_user::CreateUserCmd;
 use axum::http::StatusCode;
 use axum::Json;
 use axum::{
@@ -8,8 +8,7 @@ use axum::{
     response::IntoResponse,
     Extension,
 };
-use contracts::{HasConfig, HasPort, HasRegistry};
-use domain::error::DomainError;
+use contracts::ports::{DomainError, MetricsRegistry};
 use prometheus::{Encoder, TextEncoder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -32,12 +31,12 @@ pub struct BuildInfo {
 }
 
 pub async fn main_handler<S>(
-    State(app_state): State<S>,
+    State(_app_state): State<S>,
     Extension(request_id_extension): Extension<RequestId>,
     Query(params): Query<HandlerParams>,
 ) -> Result<String, ApiError>
 where
-    S: HasConfig + HasPort + Send + Sync + 'static,
+    S: Send + Sync + 'static,
 {
     let request_id = request_id_extension
         .header_value()
@@ -46,7 +45,6 @@ where
 
     tracing::info!(
         request_id = %request_id,
-        app_port = app_state.port(),
         "Processing request for the main handler"
     );
 
@@ -113,7 +111,7 @@ pub async fn panic_handler() -> Result<impl IntoResponse, ApiError> {
 
 pub async fn metrics_handler<S>(State(app_state): State<S>) -> impl IntoResponse
 where
-    S: HasRegistry + Send + Sync + 'static,
+    S: MetricsRegistry + Send + Sync + 'static,
 {
     let mut buffer = Vec::new();
     let encoder = TextEncoder::new();
@@ -142,7 +140,7 @@ pub async fn create_user_handler<S>(
     Json(payload): Json<CreateUserRequest>,
 ) -> Result<Json<UserResponse>, ApiError>
 where
-    S: HasCreateUserUc + Send + Sync + 'static,
+    S: application::use_cases::create_user::HasCreateUserUc + Send + Sync + 'static,
 {
     tracing::info!("Attempting to create user with name: {}", payload.name);
 

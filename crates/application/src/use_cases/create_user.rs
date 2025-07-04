@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use domain::{error::DomainError, user::User};
+use contracts::ports::{DomainError, User, UserRepository};
 use uuid::{timestamp::context, Timestamp, Uuid};
-
-use crate::ports::UserRepository;
 
 #[derive(Debug)]
 pub struct CreateUserCmd {
@@ -49,5 +47,29 @@ impl CreateUserUseCase for UserSvc {
         self.repo.save(&user).await?;
 
         Ok(user)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use contracts::ports::MockUserRepository;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_create_user_success() {
+        let mut mock_repo = MockUserRepository::new();
+        mock_repo
+            .expect_save()
+            .times(1)
+            .returning(|_| Box::pin(async { Ok(()) }));
+
+        let use_case = UserSvc::new(Arc::new(mock_repo));
+        let cmd = CreateUserCmd {
+            name: "Test User".to_string(),
+        };
+
+        let result = use_case.exec(cmd).await;
+        assert!(result.is_ok());
     }
 }

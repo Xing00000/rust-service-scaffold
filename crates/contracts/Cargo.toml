@@ -4,6 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# 只放抽象所需的東西；Config 若想保持純 trait，可 forward declare
+domain = { path = "../domain" }
 prometheus = { workspace = true }
 thiserror = { workspace = true }
+async-trait = { workspace = true }
+uuid = { workspace = true }
+mockall = { workspace = true, optional = true }
+
+[features]
+default = []
+testing = ["mockall"]

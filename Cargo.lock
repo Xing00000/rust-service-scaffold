@@ -53,6 +53,7 @@ dependencies = [
  "domain",
  "mockall",
  "thiserror 1.0.69",
+ "tokio",
  "uuid",
  "validator",
 ]
@@ -206,7 +207,6 @@ dependencies = [
  "async-trait",
  "axum",
  "contracts",
- "domain",
  "dotenvy",
  "figment",
  "hyper",
@@ -295,8 +295,12 @@ checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 name = "contracts"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "domain",
+ "mockall",
  "prometheus",
  "thiserror 1.0.69",
+ "uuid",
 ]
 
 [[package]]
@@ -1047,9 +1051,8 @@ dependencies = [
 name = "infra_db_postgres"
 version = "0.1.0"
 dependencies = [
- "application",
  "async-trait",
- "domain",
+ "contracts",
  "sqlx",
  "thiserror 1.0.69",
  "uuid",
@@ -1060,9 +1063,9 @@ name = "infra_telemetry"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "application",
  "async-trait",
  "axum",
+ "contracts",
  "dotenvy",
  "figment",
  "opentelemetry",
@@ -1668,7 +1671,6 @@ dependencies = [
  "application",
  "axum",
  "contracts",
- "domain",
  "hyper",
  "once_cell",
  "opentelemetry",

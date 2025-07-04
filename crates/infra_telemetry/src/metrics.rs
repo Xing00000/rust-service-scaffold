@@ -57,7 +57,7 @@ impl Default for Metrics {
 }
 
 #[async_trait]
-impl application::ports::ObservabilityPort for Metrics {
+impl contracts::ports::ObservabilityPort for Metrics {
     async fn on_request_start(&self, method: &str, path: &str) {
         // Call the existing synchronous method.
         // In a real-world scenario, if the underlying metrics library supported async,

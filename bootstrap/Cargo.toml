@@ -9,7 +9,6 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 # === 自家 Workspace Crates ===
 contracts = { path = "../crates/contracts" }
-domain = { path = "../crates/domain" }
 application = { path = "../crates/application" }
 infra_db_postgres = { path = "../crates/infra_db_postgres" }
 infra_telemetry = { path = "../crates/infra_telemetry" }

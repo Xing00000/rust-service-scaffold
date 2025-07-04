@@ -1,4 +1,4 @@
-use domain::user::User as DomainUser; // Alias to avoid confusion
+use contracts::ports::User as DomainUser;
 use serde::{Deserialize, Serialize};
 
 // === Request DTOs ===

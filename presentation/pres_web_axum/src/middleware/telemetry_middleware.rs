@@ -1,16 +1,16 @@
 use std::time::Instant;
 
-use application::ports::DynObs;
 use axum::body::Body;
 use axum::extract::MatchedPath;
 use axum::http::Request;
 use axum::middleware::Next;
 use axum::response::IntoResponse;
-use axum::Extension; // Added for ObservabilityPort
+use axum::Extension;
+use contracts::ports::DynObservability; // Added for ObservabilityPort
 
 // 把 ObservabilityPort trait object 傳進來 (可透過 extension or app_state)
 pub async fn axum_metrics_middleware(
-    Extension(obs): Extension<DynObs>, // Changed to use DynObs
+    Extension(obs): Extension<DynObservability>,
     req: Request<Body>,
     next: Next,
 ) -> impl IntoResponse {

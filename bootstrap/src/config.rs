@@ -1,6 +1,5 @@
 // src/config.rs
 
-use contracts::HasPort;
 use figment::{
     providers::{Env, Format, Toml},
     Figment,
@@ -59,12 +58,5 @@ impl Config {
         config.validate()?; // validator 的錯誤也會被自動轉換
 
         Ok(config)
-    }
-}
-
-// app/config.rs
-impl HasPort for Config {
-    fn port(&self) -> u16 {
-        self.port
     }
 }
