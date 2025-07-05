@@ -1,0 +1,13 @@
+# Development environment configuration
+port = 8080
+log_level = "debug"
+otel_service_name = "rust-service-scaffold-dev"
+otel_exporter_otlp_endpoint = "http://localhost:4317"
+rate_limit_per_second = 100
+rate_limit_burst_size = 200
+database_url = "postgres://user:password@localhost:5432/dev_db"
+db_max_conn = 5
+
+[[http_headers]]
+name = "X-Environment"
+value = "development"

@@ -49,8 +49,11 @@ pub struct Config {
 impl Config {
     /// 從文件和環境變量加載配置，並進行驗證
     pub fn load() -> Result<Self, ConfigError> {
+        let env = std::env::var("APP_ENV").unwrap_or_else(|_| "default".to_string());
+
         let config: Config = Figment::new()
             .merge(Toml::file("config/default.toml"))
+            .merge(Toml::file(format!("config/{}.toml", env)))
             .merge(Env::prefixed("APP_"))
             .extract()
             .map_err(|e| ConfigError::Load(Box::new(e)))?;

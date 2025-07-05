@@ -1,0 +1,17 @@
+# Production environment configuration
+port = 8080
+log_level = "info"
+otel_service_name = "rust-service-scaffold"
+otel_exporter_otlp_endpoint = "http://otel-collector:4317"
+rate_limit_per_second = 10
+rate_limit_burst_size = 50
+database_url = "postgres://user:password@postgres:5432/prod_db"
+db_max_conn = 20
+
+[[http_headers]]
+name = "X-Environment"
+value = "production"
+
+[[http_headers]]
+name = "X-Content-Type-Options"
+value = "nosniff"

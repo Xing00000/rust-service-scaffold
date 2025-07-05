@@ -1045,6 +1045,7 @@ dependencies = [
  "contracts",
  "sqlx",
  "thiserror 1.0.69",
+ "tokio",
  "uuid",
 ]
 
@@ -1670,6 +1671,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "application",
+ "async-trait",
  "axum",
  "contracts",
  "hyper",

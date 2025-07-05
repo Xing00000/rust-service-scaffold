@@ -50,3 +50,24 @@ impl UserRepository for PostgresUserRepository {
         self.pool.close().await;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_user_conversion() {
+        let user_row = UserRow {
+            id: Uuid::new_v4(),
+            name: "Test User".to_string(),
+        };
+
+        let user = User {
+            id: user_row.id,
+            name: user_row.name.clone(),
+        };
+
+        assert_eq!(user.name, "Test User");
+        assert_eq!(user.id, user_row.id);
+    }
+}
