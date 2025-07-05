@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use contracts::{DomainError, ports::{User, UserRepository}};
+use contracts::{
+    ports::{User, UserRepository},
+    DomainError,
+};
 use uuid::{timestamp::context, Timestamp, Uuid};
 
 #[derive(Debug)]

@@ -4,13 +4,13 @@ use thiserror::Error;
 pub enum DomainError {
     #[error("Business rule violation: {0}")]
     BusinessRule(String),
-    
+
     #[error("Entity not found: {0}")]
     NotFound(String),
-    
+
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
-    
+
     #[error("Validation error: {0}")]
     Validation(String),
 }
@@ -44,6 +44,9 @@ mod tests {
     fn test_business_rule_error() {
         let error = DomainError::BusinessRule("Business rule violation".to_string());
         assert!(matches!(error, DomainError::BusinessRule(_)));
-        assert_eq!(error.to_string(), "Business rule violation: Business rule violation");
+        assert_eq!(
+            error.to_string(),
+            "Business rule violation: Business rule violation"
+        );
     }
 }

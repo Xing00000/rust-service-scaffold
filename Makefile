@@ -22,34 +22,42 @@ RELEASE_APP_BINARY_PATH := target/release/$(APP_CRATE)
 # --- Help Command ---
 help:
 	@echo "=========================================================="
-	@echo " Axum Hexagonal Template - Makefile Commands"
+	@echo " Rust Service Scaffold - Makefile Commands"
 	@echo "=========================================================="
 	@echo " Usage: make [command]"
 	@echo ""
-	@echo " Core Commands:"
-	@echo "   help              : Display this help message."
-	@echo "   dev               : Build and run the application in development mode."
-	@echo "   run               : Run the last built development binary."
-	@echo "   build             : Build the application in development mode."
-	@echo "   build-release     : Build the application in release mode (optimized)."
-	@echo "   run-release       : Run the last built release binary."
-	@echo "   test              : Run all tests (unit, integration, doc tests)."
-	@echo "   check             : Run a quick check for type errors without building."
-	@echo "   fmt               : Format all Rust code."
-	@echo "   clippy            : Run Clippy linter."
-	@echo "   doc               : Generate HTML documentation."
-	@echo "   clean             : Clean build artifacts."
-	@echo "   audit             : Run `cargo audit` to check for security vulnerabilities."
+	@echo " Development Commands:"
+	@echo "   dev               : Start development server with hot reload"
+	@echo "   build             : Build the application in development mode"
+	@echo "   build-release     : Build the application in release mode (optimized)"
+	@echo "   run               : Run the last built development binary"
+	@echo "   run-release       : Run the last built release binary"
+	@echo ""
+	@echo " Testing & Quality:"
+	@echo "   test              : Run all tests (unit, integration, doc tests)"
+	@echo "   quality-check     : Run complete quality check pipeline"
+	@echo "   fmt               : Format all Rust code"
+	@echo "   clippy            : Run Clippy linter"
+	@echo "   audit             : Run security vulnerability check"
+	@echo ""
+	@echo " Docker & Infrastructure:"
+	@echo "   docker-up         : Start development dependencies (PostgreSQL, Redis)"
+	@echo "   docker-down       : Stop development dependencies"
+	@echo "   docker-logs       : Show logs from development dependencies"
+	@echo ""
+	@echo " Utilities:"
+	@echo "   check             : Run a quick check for type errors"
+	@echo "   doc               : Generate HTML documentation"
+	@echo "   clean             : Clean build artifacts"
+	@echo "   help              : Display this help message"
 	@echo "=========================================================="
 
 # --- Development Commands ---
 
 .PHONY: dev
-dev: build
-	@echo "🚀 Running $(APP_CRATE) in development mode..."
-	$(APP_BINARY_PATH) --port $(PORT) # Pass port if your config allows CLI override
-	# Alternative: use `cargo run` if you don't want a pre-build step
-	# cargo run -p $(APP_CRATE) -- --port $(PORT)
+dev:
+	@echo "🚀 Starting development server with hot reload..."
+	./scripts/dev.sh
 
 .PHONY: run
 run:
@@ -75,10 +83,13 @@ run-release: build-release
 
 .PHONY: test
 test:
-	@echo "🧪 Running all tests..."
-	# Run unit tests (within each crate's src/tests or inline) and doc tests
-	# `cargo test --workspace` runs tests for all members.
-	cargo test --workspace
+	@echo "🧪 Running comprehensive test suite..."
+	./scripts/test.sh
+
+.PHONY: quality-check
+quality-check:
+	@echo "🔍 Running complete quality check pipeline..."
+	./scripts/quality-check.sh
 
 .PHONY: check
 check:
@@ -112,6 +123,26 @@ audit:
 clean:
 	@echo "🗑️ Cleaning build artifacts..."
 	cargo clean
+
+# --- Docker Commands ---
+
+.PHONY: docker-up
+docker-up:
+	@echo "🐳 Starting development dependencies..."
+	docker-compose up -d
+	@echo "⏳ Waiting for services to be ready..."
+	sleep 5
+	@echo "✅ Development environment is ready!"
+
+.PHONY: docker-down
+docker-down:
+	@echo "🐳 Stopping development dependencies..."
+	docker-compose down
+
+.PHONY: docker-logs
+docker-logs:
+	@echo "📋 Showing logs from development dependencies..."
+	docker-compose logs -f
 
 # --- Phony Targets ---
 # .PHONY declares targets that are not actual files.

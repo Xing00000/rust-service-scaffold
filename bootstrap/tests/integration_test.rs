@@ -4,7 +4,6 @@ use bootstrap::{
     state::AppState,
 };
 
-use contracts::ports::{DomainError, User};
 use infra_telemetry::telemetry;
 use pres_web_axum::handlers;
 use serde_json::Value;
@@ -25,81 +24,15 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
 use application::use_cases::create_user::{CreateUserUseCase, UserSvc};
 use axum::body::{to_bytes, Body};
 
-use async_trait::async_trait;
-use contracts::ports::UserRepository;
 use hyper::{Request, StatusCode};
 use once_cell::sync::Lazy;
-use uuid::Uuid;
 
 // For FakeObs
 use axum::middleware;
-use contracts::ports::{DynObservability, ObservabilityPort};
+use contracts::ports::DynObservability;
 use pres_web_axum::middleware::telemetry_middleware;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
-
-#[derive(Clone, Default)]
-struct FakeObs {
-    request_start_calls: Arc<AtomicUsize>,
-    request_end_calls: Arc<AtomicUsize>,
-}
-
-impl FakeObs {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    #[allow(dead_code)] // Potentially used in future assertions
-    fn get_request_start_calls(&self) -> usize {
-        self.request_start_calls.load(Ordering::SeqCst)
-    }
-
-    #[allow(dead_code)] // Potentially used in future assertions
-    fn get_request_end_calls(&self) -> usize {
-        self.request_end_calls.load(Ordering::SeqCst)
-    }
-
-    #[allow(dead_code)] // Potentially used in future assertions
-    fn reset_counts(&self) {
-        self.request_start_calls.store(0, Ordering::SeqCst);
-        self.request_end_calls.store(0, Ordering::SeqCst);
-    }
-}
-
-#[async_trait]
-impl ObservabilityPort for FakeObs {
-    async fn on_request_start(&self, _method: &str, _path: &str) {
-        self.request_start_calls.fetch_add(1, Ordering::SeqCst);
-    }
-
-    async fn on_request_end(&self, _method: &str, _path: &str, _status: u16, _latency: f64) {
-        self.request_end_calls.fetch_add(1, Ordering::SeqCst);
-    }
-}
-
-#[derive(Clone, Default)]
-struct TestWriter {
-    buf: Arc<Mutex<Vec<u8>>>,
-}
-
-impl TestWriter {
-    fn new() -> Self {
-        Self::default()
-    }
-    fn get_logs(&self) -> String {
-        String::from_utf8_lossy(&self.buf.lock().unwrap()).to_string()
-    }
-}
-
-impl std::io::Write for TestWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.buf.lock().unwrap().write(buf)
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.buf.lock().unwrap().flush()
-    }
-}
 
 async fn test_handler(Extension(request_id_extension): Extension<RequestId>) -> String {
     let request_id = request_id_extension
@@ -232,7 +165,7 @@ fn test_panic_hook_logs_details() {
             // 斷言 panic 的位置信息
             let location = log_entry["fields"]["location"].as_str().unwrap();
             assert!(
-                location.contains("presentation/pres_web_axum/src/handlers.rs"),
+                location.contains("presentation/pres_web_axum/src/handlers/main.rs"),
                 "Log should contain the correct panic location"
             );
 
@@ -280,10 +213,8 @@ fn unit_test_logging_module() {
             continue;
         }
 
-        let log_entry: Value = serde_json::from_str(line).expect(&format!(
-            "Log line should be valid JSON. Failed on line: {}",
-            line
-        ));
+        let log_entry: Value = serde_json::from_str(line)
+            .unwrap_or_else(|_| panic!("Log line should be valid JSON. Failed on line: {}", line));
 
         if let Some(message) = log_entry["fields"]["message"].as_str() {
             if message == "A panic occurred" {
@@ -411,24 +342,8 @@ fn test_global_panic_hook_logs_from_tokio_task() {
     );
 }
 
-// 實作一個測試專用 fake/mock struct
-#[derive(Default)]
-pub struct FakeUserRepository;
-#[async_trait]
-impl UserRepository for FakeUserRepository {
-    async fn find(&self, id: &Uuid) -> Result<User, DomainError> {
-        // fake 行為
-        Ok(User {
-            id: *id,
-            name: "Test".to_string(),
-        })
-    }
-    async fn save(&self, _user: &User) -> Result<(), DomainError> {
-        Ok(())
-    }
-
-    async fn shutdown(&self) {}
-}
+mod common;
+use common::{FakeObservability, FakeUserRepository, TestWriter};
 
 #[tokio::test]
 async fn test_structured_error_response() {
@@ -448,17 +363,15 @@ async fn test_structured_error_response() {
         db_max_conn: 10,
     });
     let registry = prometheus::Registry::new();
-    let mock_repo = Arc::new(FakeUserRepository::default());
+    let mock_repo = Arc::new(FakeUserRepository);
     let _create_user_uc: Arc<dyn CreateUserUseCase> = Arc::new(UserSvc::new(mock_repo.clone()));
 
-    let fake_obs_instance = Arc::new(FakeObs::new());
+    let fake_obs_instance = Arc::new(FakeObservability::new());
     let _obs_port_for_app_state: DynObservability = fake_obs_instance.clone(); // Clone for AppState
     let obs_port_for_extension: DynObservability = fake_obs_instance.clone(); // Clone for Extension layer
 
-    let container = application::Container::new(
-        Arc::new(FakeUserRepository::default()),
-        fake_obs_instance.clone(),
-    );
+    let container =
+        application::Container::new(Arc::new(FakeUserRepository), fake_obs_instance.clone());
 
     let app_state = AppState {
         config: test_config.clone(),

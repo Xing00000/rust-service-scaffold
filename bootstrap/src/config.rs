@@ -47,16 +47,24 @@ pub struct Config {
 }
 
 impl Config {
-    /// 從文件和環境變量加載配置，並進行驗證。
-    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
+    /// 從文件和環境變量加載配置，並進行驗證
+    pub fn load() -> Result<Self, ConfigError> {
         let config: Config = Figment::new()
             .merge(Toml::file("config/default.toml"))
             .merge(Env::prefixed("APP_"))
-            .extract()?; // Figment 的錯誤會被自動轉換為 Box<dyn Error>
+            .extract()
+            .map_err(|e| ConfigError::Load(Box::new(e)))?;
 
-        // 驗證配置，如果失敗則返回一個 boxed error
-        config.validate()?; // validator 的錯誤也會被自動轉換
-
+        config.validate().map_err(ConfigError::Validation)?;
         Ok(config)
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    #[error("Failed to load configuration: {0}")]
+    Load(#[from] Box<figment::Error>),
+
+    #[error("Configuration validation failed: {0}")]
+    Validation(#[from] validator::ValidationErrors),
 }
