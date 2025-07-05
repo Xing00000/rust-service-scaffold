@@ -3,7 +3,7 @@ use std::sync::Arc;
 use application::Container;
 use contracts::ports::{DynObservability, DynUserRepo};
 use infra_db_postgres::user_repo::PostgresUserRepository;
-use infra_telemetry::{metrics::Metrics, config::TelemetryConfig};
+use infra_telemetry::{config::TelemetryConfig, metrics::Metrics};
 
 use crate::config::Config;
 
@@ -30,7 +30,7 @@ impl DependencyFactory {
         Ok(Arc::new(repo))
     }
 
-    fn create_observability(config: &Config) -> DynObservability {
+    fn create_observability(_config: &Config) -> DynObservability {
         let telemetry_config = TelemetryConfig {
             otel_service_name: "rust-service-scaffold".to_string(),
             otel_exporter_otlp_endpoint: "http://localhost:4317".to_string(),

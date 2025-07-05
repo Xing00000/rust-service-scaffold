@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use crate::id_service::IdService;
 use async_trait::async_trait;
 use contracts::{
     ports::{User, UserRepository},
     DomainError,
 };
-use crate::id_service::IdService;
 
 #[derive(Debug)]
 pub struct CreateUserCmd {
@@ -37,7 +37,7 @@ impl CreateUserUseCase for UserSvc {
     async fn exec(&self, cmd: CreateUserCmd) -> Result<User, DomainError> {
         // 1) 生成 ID
         let user_id = IdService::generate_user_id();
-        
+
         // 2) 建立 Domain 物件（使用 Domain 層的業務驗證）
         let user = User::new(user_id, cmd.name)?;
 
@@ -51,18 +51,28 @@ impl CreateUserUseCase for UserSvc {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use contracts::{User, UserId, DomainError};
-    use std::{sync::Arc, future::Future, pin::Pin};
+    use contracts::{DomainError, User, UserId};
     use domain::UserRepository;
+    use std::{future::Future, pin::Pin, sync::Arc};
 
     struct MockUserRepository;
 
     impl UserRepository for MockUserRepository {
-        fn find(&self, _id: &UserId) -> Pin<Box<dyn Future<Output = Result<User, DomainError>> + Send + '_>> {
-            Box::pin(async { Err(DomainError::NotFound { message: "Not implemented".to_string() }) })
+        fn find(
+            &self,
+            _id: &UserId,
+        ) -> Pin<Box<dyn Future<Output = Result<User, DomainError>> + Send + '_>> {
+            Box::pin(async {
+                Err(DomainError::NotFound {
+                    message: "Not implemented".to_string(),
+                })
+            })
         }
 
-        fn save(&self, _user: &User) -> Pin<Box<dyn Future<Output = Result<(), DomainError>> + Send + '_>> {
+        fn save(
+            &self,
+            _user: &User,
+        ) -> Pin<Box<dyn Future<Output = Result<(), DomainError>> + Send + '_>> {
             Box::pin(async { Ok(()) })
         }
 

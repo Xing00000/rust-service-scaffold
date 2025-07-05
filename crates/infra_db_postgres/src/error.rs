@@ -18,16 +18,20 @@ impl From<DbError> for InfraError {
 impl From<DbError> for DomainError {
     fn from(e: DbError) -> Self {
         match e {
-            DbError::Sqlx(sqlx::Error::RowNotFound) => {
-                DomainError::NotFound { message: "Entity not found".to_string() }
-            }
+            DbError::Sqlx(sqlx::Error::RowNotFound) => DomainError::NotFound {
+                message: "Entity not found".to_string(),
+            },
             DbError::Sqlx(sqlx_err) => {
                 if let Some(db_err) = sqlx_err.as_database_error() {
                     if db_err.is_unique_violation() {
-                        return DomainError::InvalidOperation { message: "Duplicate entry".to_string() };
+                        return DomainError::InvalidOperation {
+                            message: "Duplicate entry".to_string(),
+                        };
                     }
                 }
-                DomainError::InvalidOperation { message: "Database operation failed".to_string() }
+                DomainError::InvalidOperation {
+                    message: "Database operation failed".to_string(),
+                }
             }
         }
     }

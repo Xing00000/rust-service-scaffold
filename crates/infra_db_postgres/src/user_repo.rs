@@ -22,37 +22,44 @@ impl PostgresUserRepository {
 }
 
 impl UserRepository for PostgresUserRepository {
-    fn find(&self, id: &UserId) -> Pin<Box<dyn Future<Output = Result<User, DomainError>> + Send + '_>> {
+    fn find(
+        &self,
+        id: &UserId,
+    ) -> Pin<Box<dyn Future<Output = Result<User, DomainError>> + Send + '_>> {
         let id_string = id.as_str().to_string();
         let pool = self.pool.clone();
         Box::pin(async move {
-            let uuid = Uuid::parse_str(&id_string)
-                .map_err(|_| DomainError::InvalidOperation { message: "Invalid ID format".to_string() })?;
-            
-            let row: Result<UserRow, sqlx::Error> = sqlx::query_as(
-                "SELECT id, name FROM users WHERE id = $1"
-            )
-            .bind(uuid)
-            .fetch_one(&pool)
-            .await;
-            
+            let uuid = Uuid::parse_str(&id_string).map_err(|_| DomainError::InvalidOperation {
+                message: "Invalid ID format".to_string(),
+            })?;
+
+            let row: Result<UserRow, sqlx::Error> =
+                sqlx::query_as("SELECT id, name FROM users WHERE id = $1")
+                    .bind(uuid)
+                    .fetch_one(&pool)
+                    .await;
+
             let row = row.map_err(|e| DomainError::from(DbError::from(e)))?;
             let user_id = UserId::from_string(row.id.to_string());
             User::new(user_id, row.name)
         })
     }
 
-    fn save(&self, user: &User) -> Pin<Box<dyn Future<Output = Result<(), DomainError>> + Send + '_>> {
+    fn save(
+        &self,
+        user: &User,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DomainError>> + Send + '_>> {
         let id_string = user.id.as_str().to_string();
         let name = user.name.clone();
         let pool = self.pool.clone();
         Box::pin(async move {
-            let uuid = Uuid::parse_str(&id_string)
-                .map_err(|_| DomainError::InvalidOperation { message: "Invalid ID format".to_string() })?;
-            
+            let uuid = Uuid::parse_str(&id_string).map_err(|_| DomainError::InvalidOperation {
+                message: "Invalid ID format".to_string(),
+            })?;
+
             sqlx::query(
                 r#"INSERT INTO users (id, name) VALUES ($1, $2)
-                   ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name"#
+                   ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name"#,
             )
             .bind(uuid)
             .bind(name)

@@ -12,13 +12,13 @@ impl IdService {
         let uuid = Uuid::now_v7();
         UserId::from_string(uuid.to_string())
     }
-    
+
     /// 從 UUID 字符串創建用戶 ID
     pub fn user_id_from_uuid_string(uuid_str: &str) -> Result<UserId, uuid::Error> {
         let _uuid = Uuid::parse_str(uuid_str)?; // 驗證格式
         Ok(UserId::from_string(uuid_str.to_string()))
     }
-    
+
     /// 將用戶 ID 轉換為 UUID（用於基礎設施層）
     pub fn user_id_to_uuid(user_id: &UserId) -> Result<Uuid, uuid::Error> {
         Uuid::parse_str(user_id.as_str())

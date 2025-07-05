@@ -11,14 +11,18 @@ use std::{future::Future, pin::Pin};
 pub struct FakeUserRepository;
 
 impl UserRepository for FakeUserRepository {
-    fn find(&self, id: &UserId) -> Pin<Box<dyn Future<Output = Result<User, DomainError>> + Send + '_>> {
+    fn find(
+        &self,
+        id: &UserId,
+    ) -> Pin<Box<dyn Future<Output = Result<User, DomainError>> + Send + '_>> {
         let id = id.clone();
-        Box::pin(async move {
-            User::new(id, "Test User".to_string())
-        })
+        Box::pin(async move { User::new(id, "Test User".to_string()) })
     }
 
-    fn save(&self, _user: &User) -> Pin<Box<dyn Future<Output = Result<(), DomainError>> + Send + '_>> {
+    fn save(
+        &self,
+        _user: &User,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DomainError>> + Send + '_>> {
         Box::pin(async { Ok(()) })
     }
 

@@ -36,7 +36,7 @@ pub use mockall::mock;
 #[cfg(any(test, feature = "testing"))]
 mock! {
     pub ObservabilityPort {}
-    
+
     #[async_trait]
     impl ObservabilityPort for ObservabilityPort {
         async fn on_request_start(&self, method: &str, path: &str);

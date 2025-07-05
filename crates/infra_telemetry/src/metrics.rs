@@ -1,10 +1,10 @@
+use crate::config::TelemetryConfig;
 use async_trait::async_trait;
 use opentelemetry::{
     global,
     metrics::{Counter, Histogram},
     KeyValue,
 };
-use crate::config::TelemetryConfig;
 
 const HTTP_REQUESTS_TOTAL: &str = "http_requests_total";
 const HTTP_REQUESTS_DURATION: &str = "http_requests_duration_seconds";
@@ -19,7 +19,8 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn new(config: &TelemetryConfig) -> Self {
-        let service_name: &'static str = Box::leak(config.otel_service_name.clone().into_boxed_str());
+        let service_name: &'static str =
+            Box::leak(config.otel_service_name.clone().into_boxed_str());
         let meter = global::meter(service_name);
         Self {
             http_requests_total: meter
