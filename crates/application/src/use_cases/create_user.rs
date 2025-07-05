@@ -66,7 +66,7 @@ mod tests {
         mock_repo
             .expect_save()
             .times(1)
-            .returning(|_| Box::pin(async { Ok(()) }));
+            .returning(|_| Ok(()));
 
         let use_case = UserSvc::new(Arc::new(mock_repo));
         let cmd = CreateUserCmd {

@@ -27,6 +27,7 @@ thiserror = { workspace = true }
 # `v7` 特性啟用 UUIDv7 的生成，該版本是基於時間的且可排序，對資料庫索引友好。
 # `fast-rng` 啟用更快的隨機數生成器。
 uuid = { workspace = true }
+async-trait = { workspace = true }
 
 # `itertools` 提供了一些方便的迭代器適配器和實用函數，通常是純運算。
 # 根據實際需要選擇是否包含。

@@ -1,25 +1,34 @@
-use async_trait::async_trait;
 use std::sync::Arc;
 
-// Re-export domain types
-pub use domain::{error::DomainError, user::User};
+// Re-export domain types and ports
+pub use domain::{error::DomainError, user::User, UserRepository, ObservabilityPort};
 pub use uuid::Uuid;
 
-//=== Repository Ports ===//
-#[async_trait]
-#[cfg_attr(any(test, feature = "testing"), mockall::automock)]
-pub trait UserRepository: Send + Sync {
-    async fn find(&self, id: &Uuid) -> Result<User, DomainError>;
-    async fn save(&self, user: &User) -> Result<(), DomainError>;
-    async fn shutdown(&self);
+// Mock implementations for testing
+#[cfg(any(test, feature = "testing"))]
+pub use mockall::mock;
+
+#[cfg(any(test, feature = "testing"))]
+mock! {
+    pub UserRepository {}
+    
+    #[async_trait::async_trait]
+    impl domain::UserRepository for UserRepository {
+        async fn find(&self, id: &Uuid) -> Result<User, DomainError>;
+        async fn save(&self, user: &User) -> Result<(), DomainError>;
+        async fn shutdown(&self);
+    }
 }
 
-//=== Observability Ports ===//
-#[async_trait]
-#[cfg_attr(any(test, feature = "testing"), mockall::automock)]
-pub trait ObservabilityPort: Send + Sync {
-    async fn on_request_start(&self, method: &str, path: &str);
-    async fn on_request_end(&self, method: &str, path: &str, status: u16, latency: f64);
+#[cfg(any(test, feature = "testing"))]
+mock! {
+    pub ObservabilityPort {}
+    
+    #[async_trait::async_trait]
+    impl domain::ObservabilityPort for ObservabilityPort {
+        async fn on_request_start(&self, method: &str, path: &str);
+        async fn on_request_end(&self, method: &str, path: &str, status: u16, latency: f64);
+    }
 }
 
 //=== Configuration Ports ===//
@@ -34,6 +43,6 @@ pub trait MetricsRegistry: Send + Sync {
 }
 
 //=== Type Aliases ===//
-pub type DynUserRepo = Arc<dyn UserRepository>;
-pub type DynObservability = Arc<dyn ObservabilityPort>;
+pub type DynUserRepo = Arc<dyn domain::UserRepository>;
+pub type DynObservability = Arc<dyn domain::ObservabilityPort>;
 pub type DynMetricsRegistry = Arc<dyn MetricsRegistry>;
