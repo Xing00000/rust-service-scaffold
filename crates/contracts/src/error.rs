@@ -29,20 +29,7 @@ pub enum InfraError {
     Config(String),
 }
 
-/// HTTP 狀態碼映射
-impl AppError {
-    pub fn status_code(&self) -> u16 {
-        match self {
-            AppError::Domain(DomainError::NotFound(_)) => 404,
-            AppError::Domain(DomainError::BusinessRule(_)) => 400,
-            AppError::Domain(DomainError::InvalidOperation(_)) => 400,
-            AppError::Domain(DomainError::Validation(_)) => 400,
-            AppError::Validation(_) => 400,
-            AppError::Infrastructure(_) => 500,
-            AppError::Application(_) => 500,
-        }
-    }
-}
+// HTTP 狀態碼映射已移除 - 由 presentation 層負責
 
 // 向後兼容
 pub type CoreError = AppError;

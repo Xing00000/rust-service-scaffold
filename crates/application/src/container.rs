@@ -2,7 +2,7 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::use_cases::create_user::{CreateUserUseCase, UserSvc};
+use crate::use_cases::create_user::{CreateUserUseCase, HasCreateUserUc, UserSvc};
 use contracts::ports::{DynObservability, DynUserRepo};
 
 /// 改進的依賴注入容器
@@ -48,11 +48,6 @@ impl Container {
             .downcast_ref::<Arc<T>>()
             .cloned()
     }
-}
-
-/// 提供用例的 trait
-pub trait HasCreateUserUc {
-    fn create_user_uc(&self) -> Arc<dyn CreateUserUseCase>;
 }
 
 impl HasCreateUserUc for Container {

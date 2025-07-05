@@ -30,19 +30,16 @@ mod tests {
     use crate::dtos::CreateUserRequest;
     use application::use_cases::create_user::{CreateUserUseCase, HasCreateUserUc};
     use async_trait::async_trait;
-    use contracts::ports::{DomainError, User};
+    use contracts::ports::{DomainError, User, UserId};
     use std::sync::Arc;
-    use uuid::Uuid;
 
     struct MockAppState;
 
     #[async_trait]
     impl CreateUserUseCase for MockAppState {
         async fn exec(&self, _cmd: CreateUserCmd) -> Result<User, DomainError> {
-            Ok(User {
-                id: Uuid::new_v4(),
-                name: "Test User".to_string(),
-            })
+            let id = UserId::from_string("test-id".to_string());
+            User::new(id, "Test User".to_string())
         }
     }
 

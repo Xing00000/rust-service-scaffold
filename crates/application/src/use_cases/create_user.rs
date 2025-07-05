@@ -5,7 +5,7 @@ use contracts::{
     ports::{User, UserRepository},
     DomainError,
 };
-use uuid::{timestamp::context, Timestamp, Uuid};
+use crate::id_service::IdService;
 
 #[derive(Debug)]
 pub struct CreateUserCmd {
@@ -35,16 +35,11 @@ impl UserSvc {
 #[async_trait]
 impl CreateUserUseCase for UserSvc {
     async fn exec(&self, cmd: CreateUserCmd) -> Result<User, DomainError> {
-        // 1) 業務驗證
-        if cmd.name.trim().is_empty() {
-            return Err(DomainError::Validation("name cannot be empty".into()));
-        }
-
-        // 2) 建立 Domain 物件
-        let user = User {
-            id: Uuid::new_v7(Timestamp::now(context::ContextV7::new())),
-            name: cmd.name,
-        };
+        // 1) 生成 ID
+        let user_id = IdService::generate_user_id();
+        
+        // 2) 建立 Domain 物件（使用 Domain 層的業務驗證）
+        let user = User::new(user_id, cmd.name)?;
 
         // 3) 儲存
         self.repo.save(&user).await?;
@@ -56,18 +51,30 @@ impl CreateUserUseCase for UserSvc {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use contracts::ports::MockUserRepository;
-    use std::sync::Arc;
+    use contracts::{User, UserId, DomainError};
+    use std::{sync::Arc, future::Future, pin::Pin};
+    use domain::UserRepository;
+
+    struct MockUserRepository;
+
+    impl UserRepository for MockUserRepository {
+        fn find(&self, _id: &UserId) -> Pin<Box<dyn Future<Output = Result<User, DomainError>> + Send + '_>> {
+            Box::pin(async { Err(DomainError::NotFound { message: "Not implemented".to_string() }) })
+        }
+
+        fn save(&self, _user: &User) -> Pin<Box<dyn Future<Output = Result<(), DomainError>> + Send + '_>> {
+            Box::pin(async { Ok(()) })
+        }
+
+        fn shutdown(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+            Box::pin(async {})
+        }
+    }
 
     #[tokio::test]
     async fn test_create_user_success() {
         // Arrange
-        let mut mock_repo = MockUserRepository::new();
-        mock_repo
-            .expect_save()
-            .times(1)
-            .returning(|_| Ok(()));
-
+        let mock_repo = MockUserRepository;
         let use_case = UserSvc::new(Arc::new(mock_repo));
         let cmd = CreateUserCmd {
             name: "Test User".to_string(),
@@ -85,7 +92,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_user_empty_name() {
         // Arrange
-        let mock_repo = MockUserRepository::new();
+        let mock_repo = MockUserRepository;
         let use_case = UserSvc::new(Arc::new(mock_repo));
         let cmd = CreateUserCmd {
             name: "".to_string(),
@@ -97,7 +104,7 @@ mod tests {
         // Assert
         assert!(result.is_err());
         match result.unwrap_err() {
-            DomainError::Validation(msg) => assert_eq!(msg, "name cannot be empty"),
+            DomainError::ValidationError { message } => assert!(message.contains("empty")),
             _ => panic!("Expected validation error"),
         }
     }

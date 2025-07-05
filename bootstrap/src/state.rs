@@ -1,4 +1,4 @@
-use application::{Container, HasCreateUserUc, HasObservability};
+use application::{Container, HasObservability, use_cases::create_user::HasCreateUserUc};
 use contracts::ports::MetricsRegistry;
 use std::sync::Arc;
 

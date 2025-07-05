@@ -45,9 +45,9 @@ where
 
     if params.make_error.unwrap_or(false) {
         tracing::warn!(request_id = %request_id, "Simulating a validation error.");
-        return Err(AppError::Domain(DomainError::Validation(
-            "User triggered a bad request".to_string(),
-        ))
+        return Err(AppError::Domain(DomainError::ValidationError {
+            message: "User triggered a bad request".to_string(),
+        })
         .into());
     }
 
@@ -56,9 +56,9 @@ where
 }
 
 pub async fn test_error_handler() -> Result<&'static str, ApiError> {
-    Err(AppError::Domain(DomainError::InvalidOperation(
-        "This is a test error triggered from the /test_error route.".to_string(),
-    ))
+    Err(AppError::Domain(DomainError::InvalidOperation {
+        message: "This is a test error triggered from the /test_error route.".to_string(),
+    })
     .into())
 }
 

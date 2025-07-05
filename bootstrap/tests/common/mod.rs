@@ -1,28 +1,30 @@
 use async_trait::async_trait;
-use contracts::ports::{DomainError, ObservabilityPort, User, UserRepository};
+use contracts::{DomainError, ObservabilityPort, User, UserId};
+use domain::UserRepository;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc, Mutex,
 };
-use uuid::Uuid;
+use std::{future::Future, pin::Pin};
 
 #[derive(Default)]
 pub struct FakeUserRepository;
 
-#[async_trait]
 impl UserRepository for FakeUserRepository {
-    async fn find(&self, id: &Uuid) -> Result<User, DomainError> {
-        Ok(User {
-            id: *id,
-            name: "Test User".to_string(),
+    fn find(&self, id: &UserId) -> Pin<Box<dyn Future<Output = Result<User, DomainError>> + Send + '_>> {
+        let id = id.clone();
+        Box::pin(async move {
+            User::new(id, "Test User".to_string())
         })
     }
 
-    async fn save(&self, _user: &User) -> Result<(), DomainError> {
-        Ok(())
+    fn save(&self, _user: &User) -> Pin<Box<dyn Future<Output = Result<(), DomainError>> + Send + '_>> {
+        Box::pin(async { Ok(()) })
     }
 
-    async fn shutdown(&self) {}
+    fn shutdown(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        Box::pin(async {})
+    }
 }
 
 #[derive(Clone, Default)]

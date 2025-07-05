@@ -10,7 +10,7 @@
 
 ## ✨ 特性 (Features)
 
-- **🧅 六邊形架構**: 清晰的 `domain`, `application`, `infrastructure`, `presentation` 分層。
+- **🧅 六邊形架構**: 清晰的 `domain`, `application`, `infrastructure`, `presentation` 分層，Domain 層完全零依賴。
 - **📦 Cargo Workspace**: 強制模組邊界，加速編譯，提升專案組織性。
 - **🚀 生產級 Web 服務**:
   - **Axum**: 高性能、符合人體工學的 Web 框架。
@@ -154,11 +154,11 @@ graph TB
 
 ### 🎯 架構層級說明
 
-- **Domain**: 核心業務邏輯和實體，完全獨立，無外部依賴
-- **Contracts**: 統一的端口定義和共享類型，連接各層的抽象
-- **Application**: 用例實現和依賴注入容器，協調業務流程
-- **Infrastructure**: 外部系統適配器（資料庫、監控等）
-- **Presentation**: 對外介面（REST API、CLI 等）
+- **Domain**: 核心業務邏輯、實體和 **Port 定義**，完全零外部依賴
+- **Contracts**: 重用 Domain 的 Port 定義，提供跨層的統一抽象
+- **Application**: 用例實現、ID 轉換和依賴注入容器
+- **Infrastructure**: 實現 Domain Port，適配外部系統
+- **Presentation**: 對外介面，負責 HTTP 狀態碼映射
 - **Bootstrap**: 應用程式組裝和啟動邏輯
 
 ### 🔄 依賴注入流程
@@ -269,22 +269,27 @@ cargo test --test integration_test
 
 | 項目     | 重構前     | 重構後             |
 | -------- | ---------- | ------------------ |
-| 端口定義 | 分散在各層 | 統一在 `contracts` |
-| 依賴注入 | 手動組裝   | 工廠模式 + 容器    |
-| 測試支援 | 不完整     | Mock + 單元測試    |
-| 依賴方向 | 部分違反   | 嚴格遵循           |
+| Domain 依賴 | 依賴外部 crate | **完全零依賴** |
+| Port 定義 | 分散在各層 | **Domain 單一定義** |
+| ID 類型 | 裸 UUID | **封裝的 UserId** |
+| 錯誤處理 | thiserror | **純 Rust 標準庫** |
+| HTTP 映射 | contracts 層 | **presentation 層** |
 
-### 🔗 新增 Contracts 層
+### 🔗 Contracts 層重新定位
 
-統一管理所有抽象介面：
+重用 Domain 層的 Port 定義，提供統一抽象：
 
 ```rust
-// contracts/src/ports.rs
+// domain/src/ports.rs - 唯一的 Port 定義
 pub trait UserRepository: Send + Sync {
-    async fn find(&self, id: &Uuid) -> Result<User, DomainError>;
-    async fn save(&self, user: &User) -> Result<(), DomainError>;
+    fn find(&self, id: &UserId) -> Pin<Box<dyn Future<Output = Result<User, DomainError>> + Send + '_>>;
+    fn save(&self, user: &User) -> Pin<Box<dyn Future<Output = Result<(), DomainError>> + Send + '_>>;
 }
 
+// contracts/src/ports.rs - 重用 Domain 定義
+pub use domain::UserRepository;
+
+// 應用層特有的 Port
 pub trait ObservabilityPort: Send + Sync {
     async fn on_request_start(&self, method: &str, path: &str);
     async fn on_request_end(&self, method: &str, path: &str, status: u16, latency: f64);
@@ -326,10 +331,15 @@ impl DependencyFactory {
 ```rust
 #[tokio::test]
 async fn test_create_user_success() {
-    let mut mock_repo = MockUserRepository::new();
-    mock_repo.expect_save().returning(|_| Box::pin(async { Ok(()) }));
+    struct MockUserRepository;
+    
+    impl UserRepository for MockUserRepository {
+        fn save(&self, _user: &User) -> Pin<Box<dyn Future<Output = Result<(), DomainError>> + Send + '_>> {
+            Box::pin(async { Ok(()) })
+        }
+    }
 
-    let use_case = UserSvc::new(Arc::new(mock_repo));
+    let use_case = UserSvc::new(Arc::new(MockUserRepository));
     let result = use_case.exec(cmd).await;
     assert!(result.is_ok());
 }
@@ -360,11 +370,11 @@ async fn test_create_user_success() {
 
 #### 依賴規則檢查清單
 
-- ✅ Domain 層不能依賴任何外部 crate (除了基礎類型)
-- ✅ Application 層只能依賴 Domain 和 Contracts
-- ✅ Infrastructure 層實現 Contracts 中定義的端口
-- ✅ Presentation 層只能調用 Application 層的用例
-- ✅ Bootstrap 層負責組裝所有依賴
+- ✅ Domain 層**完全零外部依賴**，定義所有業務 Port
+- ✅ Application 層只能依賴 Domain，負責 ID 轉換和用例編排
+- ✅ Infrastructure 層**直接實現 Domain Port**，不重複定義
+- ✅ Presentation 層負責 HTTP 狀態碼映射，不洩漏到其他層
+- ✅ Contracts 層**只重用 Domain 定義**，不創建新概念
 
 ### 🔄 開發工作流程 (Development Workflow)
 
@@ -558,19 +568,28 @@ nursery = "warn"
 2. **錯誤處理**
 
    ```rust
-   // ✅ 使用 thiserror 定義結構化錯誤
-   #[derive(thiserror::Error, Debug)]
+   // ✅ 使用純 Rust 標準庫定義結構化錯誤
+   #[derive(Debug, Clone, PartialEq)]
    pub enum DomainError {
-       #[error("User not found: {id}")]
-       UserNotFound { id: Uuid },
-
-       #[error("Validation failed: {message}")]
+       NotFound { message: String },
        ValidationError { message: String },
+       BusinessRule { message: String },
+       InvalidOperation { message: String },
+   }
+   
+   impl std::fmt::Display for DomainError {
+       fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+           match self {
+               DomainError::NotFound { message } => write!(f, "Entity not found: {}", message),
+               DomainError::ValidationError { message } => write!(f, "Validation error: {}", message),
+               // ...
+           }
+       }
    }
 
-   // ✅ 使用 Result 類型
-   pub async fn find_user(id: Uuid) -> Result<User, DomainError> {
-       // 實現邏輯
+   // ✅ 使用 Result 類型和純 Future
+   pub trait UserRepository: Send + Sync {
+       fn find(&self, id: &UserId) -> Pin<Box<dyn Future<Output = Result<User, DomainError>> + Send + '_>>;
    }
    ```
 
@@ -755,11 +774,11 @@ jobs:
 
 ### 🎯 架構亮點
 
-1. **嚴格的分層隔離**
+1. **完全純淨的 Domain 層**
 
-   - 使用 Cargo Workspace 強制模組邊界
-   - 每層都有明確的職責和依賴規則
-   - contracts 層統一管理所有抽象介面
+   - Domain 層實現真正的零外部依賴
+   - 使用純 Rust 標準庫實現所有功能
+   - Domain 層是所有 Port 定義的唯一來源
 
 2. **完善的依賴注入**
 
@@ -770,7 +789,7 @@ jobs:
    impl DependencyFactory {
        pub async fn create_container(config: &Config) -> Result<Container, Error> {
            let user_repo = Self::create_user_repository(config).await?;
-           let observability = Self::create_observability();
+           let observability = Self::create_observability(config); // 配置化服務名
            Ok(Container::new(user_repo, observability))
        }
    }

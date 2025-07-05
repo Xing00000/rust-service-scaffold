@@ -1,19 +1,11 @@
-use async_trait::async_trait;
-use uuid::Uuid;
+use std::future::Future;
+use std::pin::Pin;
 
-use crate::{error::DomainError, user::User};
+use crate::{error::DomainError, id::UserId, user::User};
 
-/// 用戶儲存庫端口 - 屬於領域層
-#[async_trait]
+/// 用戶儲存庫端口 - 屬於領域層（純 Rust 實現）
 pub trait UserRepository: Send + Sync {
-    async fn find(&self, id: &Uuid) -> Result<User, DomainError>;
-    async fn save(&self, user: &User) -> Result<(), DomainError>;
-    async fn shutdown(&self);
-}
-
-/// 可觀測性端口 - 屬於領域層
-#[async_trait]
-pub trait ObservabilityPort: Send + Sync {
-    async fn on_request_start(&self, method: &str, path: &str);
-    async fn on_request_end(&self, method: &str, path: &str, status: u16, latency: f64);
+    fn find(&self, id: &UserId) -> Pin<Box<dyn Future<Output = Result<User, DomainError>> + Send + '_>>;
+    fn save(&self, user: &User) -> Pin<Box<dyn Future<Output = Result<(), DomainError>> + Send + '_>>;
+    fn shutdown(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
 }

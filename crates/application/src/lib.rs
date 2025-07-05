@@ -9,6 +9,7 @@
 
 pub mod container;
 pub mod error;
+pub mod id_service;
 pub mod use_cases;
 
 // Re-export contracts for convenience

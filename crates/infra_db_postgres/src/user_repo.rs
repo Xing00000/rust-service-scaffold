@@ -1,8 +1,9 @@
 use crate::error::DbError;
 use crate::models::UserRow;
-use async_trait::async_trait;
-use contracts::ports::{DomainError, User, UserRepository};
+use contracts::{DomainError, User, UserId};
+use domain::UserRepository;
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
+use std::{future::Future, pin::Pin};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -20,34 +21,53 @@ impl PostgresUserRepository {
     }
 }
 
-#[async_trait]
 impl UserRepository for PostgresUserRepository {
-    async fn find(&self, id: &Uuid) -> Result<User, DomainError> {
-        let row: UserRow = sqlx::query_as!(UserRow, "SELECT id, name FROM users WHERE id = $1", id)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| DomainError::from(DbError::from(e)))?;
-        Ok(User {
-            id: row.id,
-            name: row.name,
+    fn find(&self, id: &UserId) -> Pin<Box<dyn Future<Output = Result<User, DomainError>> + Send + '_>> {
+        let id_string = id.as_str().to_string();
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            let uuid = Uuid::parse_str(&id_string)
+                .map_err(|_| DomainError::InvalidOperation { message: "Invalid ID format".to_string() })?;
+            
+            let row: Result<UserRow, sqlx::Error> = sqlx::query_as(
+                "SELECT id, name FROM users WHERE id = $1"
+            )
+            .bind(uuid)
+            .fetch_one(&pool)
+            .await;
+            
+            let row = row.map_err(|e| DomainError::from(DbError::from(e)))?;
+            let user_id = UserId::from_string(row.id.to_string());
+            User::new(user_id, row.name)
         })
     }
 
-    async fn save(&self, user: &User) -> Result<(), DomainError> {
-        sqlx::query!(
-            r#"INSERT INTO users (id, name) VALUES ($1, $2)
-               ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name"#,
-            user.id,
-            user.name
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| DomainError::from(DbError::from(e)))?;
-        Ok(())
+    fn save(&self, user: &User) -> Pin<Box<dyn Future<Output = Result<(), DomainError>> + Send + '_>> {
+        let id_string = user.id.as_str().to_string();
+        let name = user.name.clone();
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            let uuid = Uuid::parse_str(&id_string)
+                .map_err(|_| DomainError::InvalidOperation { message: "Invalid ID format".to_string() })?;
+            
+            sqlx::query(
+                r#"INSERT INTO users (id, name) VALUES ($1, $2)
+                   ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name"#
+            )
+            .bind(uuid)
+            .bind(name)
+            .execute(&pool)
+            .await
+            .map_err(|e| DomainError::from(DbError::from(e)))?;
+            Ok(())
+        })
     }
 
-    async fn shutdown(&self) {
-        self.pool.close().await;
+    fn shutdown(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            pool.close().await;
+        })
     }
 }
 
@@ -57,17 +77,16 @@ mod tests {
 
     #[test]
     fn test_user_conversion() {
+        let uuid = Uuid::now_v7();
         let user_row = UserRow {
-            id: Uuid::new_v4(),
+            id: uuid,
             name: "Test User".to_string(),
         };
 
-        let user = User {
-            id: user_row.id,
-            name: user_row.name.clone(),
-        };
+        let user_id = UserId::from_string(uuid.to_string());
+        let user = User::new(user_id.clone(), user_row.name.clone()).unwrap();
 
-        assert_eq!(user.name, "Test User");
-        assert_eq!(user.id, user_row.id);
+        assert_eq!(user.id, user_id);
+        assert_eq!(user.name, user_row.name);
     }
 }

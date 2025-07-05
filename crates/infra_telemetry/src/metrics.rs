@@ -4,8 +4,8 @@ use opentelemetry::{
     metrics::{Counter, Histogram},
     KeyValue,
 };
+use crate::config::TelemetryConfig;
 
-const SERVICE_NAME: &str = "rust-service-scaffold";
 const HTTP_REQUESTS_TOTAL: &str = "http_requests_total";
 const HTTP_REQUESTS_DURATION: &str = "http_requests_duration_seconds";
 const HTTP_REQUESTS_IN_FLIGHT: &str = "http_requests_in_flight";
@@ -18,8 +18,9 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    pub fn new() -> Self {
-        let meter = global::meter(SERVICE_NAME);
+    pub fn new(config: &TelemetryConfig) -> Self {
+        let service_name: &'static str = Box::leak(config.otel_service_name.clone().into_boxed_str());
+        let meter = global::meter(service_name);
         Self {
             http_requests_total: meter
                 .u64_counter(HTTP_REQUESTS_TOTAL)
@@ -69,12 +70,18 @@ impl Metrics {
 
 impl Default for Metrics {
     fn default() -> Self {
-        Self::new()
+        let default_config = TelemetryConfig {
+            otel_service_name: "default-service".to_string(),
+            otel_exporter_otlp_endpoint: "http://localhost:4317".to_string(),
+            prometheus_path: "/metrics".to_string(),
+            log_level: "info".to_string(),
+        };
+        Self::new(&default_config)
     }
 }
 
 #[async_trait]
-impl contracts::ports::ObservabilityPort for Metrics {
+impl contracts::ObservabilityPort for Metrics {
     async fn on_request_start(&self, method: &str, path: &str) {
         Metrics::on_request_start(self, method, path);
     }
@@ -90,7 +97,13 @@ mod tests {
 
     #[test]
     fn test_metrics_creation() {
-        let metrics = Metrics::new();
+        let config = TelemetryConfig {
+            otel_service_name: "test-service".to_string(),
+            otel_exporter_otlp_endpoint: "http://localhost:4317".to_string(),
+            prometheus_path: "/metrics".to_string(),
+            log_level: "info".to_string(),
+        };
+        let metrics = Metrics::new(&config);
         // 測試指標對象創建成功 - 檢查結構體存在
         let _counter = &metrics.http_requests_total;
         let _histogram = &metrics.http_requests_duration_seconds;

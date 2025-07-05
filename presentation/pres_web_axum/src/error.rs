@@ -24,17 +24,14 @@ struct ErrResp<'a> {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
-        let status =
-            StatusCode::from_u16(self.0.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-
-        let code = match &self.0 {
-            AppError::Domain(DomainError::Validation(_)) => "VALIDATION_ERROR",
-            AppError::Domain(DomainError::NotFound(_)) => "NOT_FOUND",
-            AppError::Domain(DomainError::BusinessRule(_)) => "BUSINESS_RULE_VIOLATION",
-            AppError::Domain(DomainError::InvalidOperation(_)) => "INVALID_OPERATION",
-            AppError::Infrastructure(_) => "INFRASTRUCTURE_ERROR",
-            AppError::Application(_) => "APPLICATION_ERROR",
-            AppError::Validation(_) => "VALIDATION_ERROR",
+        let (status, code) = match &self.0 {
+            AppError::Domain(DomainError::ValidationError { .. }) => (StatusCode::BAD_REQUEST, "VALIDATION_ERROR"),
+            AppError::Domain(DomainError::NotFound { .. }) => (StatusCode::NOT_FOUND, "NOT_FOUND"),
+            AppError::Domain(DomainError::BusinessRule { .. }) => (StatusCode::BAD_REQUEST, "BUSINESS_RULE_VIOLATION"),
+            AppError::Domain(DomainError::InvalidOperation { .. }) => (StatusCode::BAD_REQUEST, "INVALID_OPERATION"),
+            AppError::Infrastructure(_) => (StatusCode::INTERNAL_SERVER_ERROR, "INFRASTRUCTURE_ERROR"),
+            AppError::Application(_) => (StatusCode::INTERNAL_SERVER_ERROR, "APPLICATION_ERROR"),
+            AppError::Validation(_) => (StatusCode::BAD_REQUEST, "VALIDATION_ERROR"),
         };
 
         let body = ErrResp {

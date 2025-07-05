@@ -6,7 +6,7 @@ use axum::http::Request;
 use axum::middleware::Next;
 use axum::response::IntoResponse;
 use axum::Extension;
-use contracts::ports::DynObservability; // Added for ObservabilityPort
+use contracts::DynObservability; // Added for ObservabilityPort
 
 // 把 ObservabilityPort trait object 傳進來 (可透過 extension or app_state)
 pub async fn axum_metrics_middleware(

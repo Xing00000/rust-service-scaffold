@@ -10,6 +10,7 @@ license = "MIT OR Apache-2.0"
 # === 自家 Workspace Crates ===
 contracts = { path = "../crates/contracts" }
 application = { path = "../crates/application" }
+domain = { path = "../crates/domain" }
 infra_db_postgres = { path = "../crates/infra_db_postgres" }
 infra_telemetry = { path = "../crates/infra_telemetry" }
 pres_web_axum = { path = "../presentation/pres_web_axum" }

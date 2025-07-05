@@ -207,6 +207,7 @@ dependencies = [
  "async-trait",
  "axum",
  "contracts",
+ "domain",
  "dotenvy",
  "figment",
  "hyper",
@@ -447,11 +448,6 @@ dependencies = [
 [[package]]
 name = "domain"
 version = "0.1.0"
-dependencies = [
- "async-trait",
- "thiserror 1.0.69",
- "uuid",
-]
 
 [[package]]
 name = "dotenvy"
@@ -1044,6 +1040,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "contracts",
+ "domain",
  "sqlx",
  "thiserror 1.0.69",
  "tokio",

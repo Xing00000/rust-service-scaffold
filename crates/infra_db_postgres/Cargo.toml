@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 contracts = { path = "../contracts" }
+domain = { path = "../domain" }
 sqlx = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
