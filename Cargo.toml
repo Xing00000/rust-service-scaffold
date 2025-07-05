@@ -60,7 +60,7 @@ hyper = { version = "1.6.0", default-features = false, features = ["full"] }
 tower = "0.4.13" # Note: Only `util` feature is for dev, but `tower` itself is used more broadly
 tower-http = { version = "0.5.2", default-features = false, features = ["set-header", "request-id", "trace", "fs"] }
 tower_governor = "0.7.0"
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "macros"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "macros", "migrate"] }
 
 async-trait = "0.1"
 # --- Async Runtime ---
@@ -79,7 +79,7 @@ opentelemetry-otlp = { version = "0.28.0", features = ["tonic", "trace"] }
 opentelemetry-semantic-conventions = "0.28.0"
 opentelemetry-prometheus = "0.28.0"
 tracing-opentelemetry = "0.29.0"
-prometheus = { version = "0.13.3", default-features = false, features = ["process"] }
+prometheus = { version = "0.13.4", default-features = false, features = ["process"] }
 
 # --- Error Handling ---
 thiserror = "1.0.58"
@@ -88,7 +88,7 @@ anyhow = "1.0.80" # Assuming a recent stable version since not specified, can be
 # --- Serialization & Validation ---
 serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 serde_json = "1.0.115"
-validator = { version = "0.18", default-features = false, features = ["derive"] }
+validator = { version = "0.20", default-features = false, features = ["derive"] }
 
 # --- Configuration ---
 figment = { version = "0.10", default-features = false, features = ["toml", "env"] }
