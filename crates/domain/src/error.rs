@@ -2,14 +2,17 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum DomainError {
+    #[error("Business rule violation: {0}")]
+    BusinessRule(String),
+    
+    #[error("Entity not found: {0}")]
+    NotFound(String),
+    
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
+    
     #[error("Validation error: {0}")]
     Validation(String),
-    #[error("Not found: {0}")]
-    NotFound(String),
-    #[error("Duplicate entry: {0}")]
-    Duplicate(String),
-    #[error("Unexpected error: {0}")]
-    Unexpected(String),
 }
 
 #[cfg(test)]
@@ -27,20 +30,20 @@ mod tests {
     fn test_not_found_error() {
         let error = DomainError::NotFound("User not found".to_string());
         assert!(matches!(error, DomainError::NotFound(_)));
-        assert_eq!(error.to_string(), "Not found: User not found");
+        assert_eq!(error.to_string(), "Entity not found: User not found");
     }
 
     #[test]
-    fn test_duplicate_error() {
-        let error = DomainError::Duplicate("User already exists".to_string());
-        assert!(matches!(error, DomainError::Duplicate(_)));
-        assert_eq!(error.to_string(), "Duplicate entry: User already exists");
+    fn test_invalid_operation_error() {
+        let error = DomainError::InvalidOperation("Invalid operation".to_string());
+        assert!(matches!(error, DomainError::InvalidOperation(_)));
+        assert_eq!(error.to_string(), "Invalid operation: Invalid operation");
     }
 
     #[test]
-    fn test_unexpected_error() {
-        let error = DomainError::Unexpected("System failure".to_string());
-        assert!(matches!(error, DomainError::Unexpected(_)));
-        assert_eq!(error.to_string(), "Unexpected error: System failure");
+    fn test_business_rule_error() {
+        let error = DomainError::BusinessRule("Business rule violation".to_string());
+        assert!(matches!(error, DomainError::BusinessRule(_)));
+        assert_eq!(error.to_string(), "Business rule violation: Business rule violation");
     }
 }

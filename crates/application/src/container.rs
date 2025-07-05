@@ -1,25 +1,51 @@
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::any::{Any, TypeId};
 
 use contracts::ports::{DynObservability, DynUserRepo};
-
 use crate::use_cases::create_user::{CreateUserUseCase, UserSvc};
 
-/// 依賴注入容器
+/// 改進的依賴注入容器
 pub struct Container {
+    // 基礎設施依賴
     user_repo: DynUserRepo,
     observability: DynObservability,
-    pub create_user_uc: Arc<dyn CreateUserUseCase>,
+    
+    // 用例註冊表
+    use_cases: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
 }
 
 impl Container {
     pub fn new(user_repo: DynUserRepo, observability: DynObservability) -> Self {
-        let create_user_uc: Arc<dyn CreateUserUseCase> = Arc::new(UserSvc::new(user_repo.clone()));
-
-        Self {
-            user_repo,
+        let mut container = Self {
+            user_repo: user_repo.clone(),
             observability,
-            create_user_uc,
-        }
+            use_cases: HashMap::new(),
+        };
+        
+        // 註冊預設用例
+        let create_user_uc: Arc<dyn CreateUserUseCase> = Arc::new(UserSvc::new(user_repo));
+        container.register_use_case(create_user_uc);
+        
+        container
+    }
+    
+    /// 註冊用例
+    pub fn register_use_case<T>(&mut self, use_case: Arc<T>) 
+    where 
+        T: Send + Sync + 'static + ?Sized 
+    {
+        self.use_cases.insert(TypeId::of::<T>(), Box::new(use_case));
+    }
+    
+    /// 獲取用例
+    pub fn get_use_case<T>(&self) -> Option<Arc<T>>
+    where 
+        T: Send + Sync + 'static + ?Sized 
+    {
+        self.use_cases.get(&TypeId::of::<T>())?
+            .downcast_ref::<Arc<T>>()
+            .cloned()
     }
 }
 
@@ -30,7 +56,8 @@ pub trait HasCreateUserUc {
 
 impl HasCreateUserUc for Container {
     fn create_user_uc(&self) -> Arc<dyn CreateUserUseCase> {
-        self.create_user_uc.clone()
+        self.get_use_case::<dyn CreateUserUseCase>()
+            .expect("CreateUserUseCase not registered")
     }
 }
 

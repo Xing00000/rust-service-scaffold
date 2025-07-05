@@ -65,7 +65,7 @@ where
 
 // 這個 handler 返回 `ApiError::Internal`，對應 HTTP 500。
 pub async fn test_error_handler() -> Result<&'static str, ApiError> {
-    Err(AppError::Domain(DomainError::Unexpected(
+    Err(AppError::Domain(DomainError::InvalidOperation(
         "This is a test error triggered from the /test_error route.".to_string(),
     ))
     .into())

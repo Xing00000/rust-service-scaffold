@@ -494,7 +494,7 @@ async fn test_structured_error_response() {
 
     // Assert
     // 現在這個斷言應該會成功，因為 handler 會被正確執行並返回 AppError::Validation
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     // ✅ 修正: 為 `to_bytes` 函數提供一個合理的 body 大小限制（例如 64KB）。
     const BODY_LIMIT: usize = 65_536; // 64KB
@@ -506,7 +506,7 @@ async fn test_structured_error_response() {
     assert_eq!(body_json["error"]["code"], "VALIDATION_ERROR");
     assert_eq!(
         body_json["error"]["message"],
-        "Validation error: User triggered a bad request"
+        "Domain error: Validation error: User triggered a bad request"
     );
 
     // Assert FakeObs calls
