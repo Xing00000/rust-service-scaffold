@@ -1,0 +1,2809 @@
+=== ./Cargo.toml ===
+# ===================================================================
+#               Workspace Root Cargo.toml
+#
+# This file defines the members of the Rust workspace and sets
+# shared configuration profiles for all crates.
+#
+# All dependency versions are explicitly set based on your provided
+# tested versions to ensure compatibility.
+# ===================================================================
+
+[workspace]
+# Use the new resolver for better dependency management.
+resolver = "2"
+
+# Define all the crates that are part of this workspace.
+# This structure enforces clear separation of concerns and allows
+# for parallel compilation and efficient caching in CI/CD pipelines.
+members = [
+    # --- Application Binary ---
+    "bootstrap",
+
+    # --- Core Library Crates ---
+    "crates/domain",
+    "crates/application",
+
+    # --- Infrastructure Adapters ---
+    # "crates/infra_db_postgres",
+    "crates/infra_telemetry",
+    # "crates/infra_cache_redis", 
+
+    # --- Presentation Layer ---
+    "presentation/pres_web_axum", 
+    "crates/contracts", 
+    "crates/infra_db_postgres",
+]
+
+# Default package metadata that can be inherited by member crates.
+# Member crates can override these fields if needed.
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["{{ authors }}"] 
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/your-username/{{ project_name }}"
+description = "A production-ready hexagonal architecture template for Rust web services using Axum."
+readme = "README.md"
+keywords = ["axum", "hexagonal", "web", "api", "rust"]
+categories = ["web-programming"]
+
+# Shared dependencies for the entire workspace.
+# This helps to unify versions of common dependencies across all crates.
+# Individual crates will still need to declare their own dependencies,
+# but they will resolve to these versions.
+#
+# All versions are from your provided tested `Cargo.toml`.
+[workspace.dependencies]
+# --- Axum and Web Framework Components ---
+axum = "0.8.4"
+hyper = { version = "1.6.0", default-features = false, features = ["full"] }
+tower = "0.4.13" # Note: Only `util` feature is for dev, but `tower` itself is used more broadly
+tower-http = { version = "0.5.2", default-features = false, features = ["set-header", "request-id", "trace", "fs"] }
+tower_governor = "0.7.0"
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "macros", "migrate"] }
+
+async-trait = "0.1"
+# --- Async Runtime ---
+tokio = { version = "1", default-features = false, features = ["full"] } # `macros` and `rt-multi-thread` can be specific to dev-dependencies if needed
+
+# --- Logging & Telemetry ---
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", default-features = false, features = ["env-filter", "json", "registry", "fmt"] }
+opentelemetry = { version = "0.28.0", default-features = false, features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.28.0", default-features = false, features = [
+    "rt-tokio",
+    "trace",
+    "metrics",
+] }
+opentelemetry-otlp = { version = "0.28.0", features = ["tonic", "trace"] }
+opentelemetry-semantic-conventions = "0.28.0"
+opentelemetry-prometheus = "0.28.0"
+tracing-opentelemetry = "0.29.0"
+prometheus = { version = "0.13.4", default-features = false, features = ["process"] }
+
+# --- Error Handling ---
+thiserror = "1.0.58"
+anyhow = "1.0.80" # Assuming a recent stable version since not specified, can be adjusted.
+
+# --- Serialization & Validation ---
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
+serde_json = "1.0.115"
+validator = { version = "0.20", default-features = false, features = ["derive"] }
+
+# --- Configuration ---
+figment = { version = "0.10", default-features = false, features = ["toml", "env"] }
+dotenvy = "0.15"
+
+# --- Utilities ---
+once_cell = "1.19.0" # While advised against in domain, it might be useful in infra/presentation
+uuid = { version = "1.8.0", features = ["v7", "fast-rng"] } # Typically default features are fine or it's small.
+# --- Dev Dependencies (used in main for tests, or by specific test crates) ---
+reqwest = { version = "0.12.20", default-features = false, features = ["json"] }
+tracing-futures = "0.2"
+vergen = { version = "8", default-features = false, features = ["build", "git", "gitcl"] }
+mockall = "0.12"
+# ===================================================================
+#                    Build Profiles
+# ===================================================================
+
+# Development profile (used for `cargo build` and `cargo run`)
+[profile.dev]
+opt-level = 0
+debug = true
+split-debuginfo = "packed" # Faster linking on some platforms
+rpath = false
+
+
+# Release profile (used for `cargo build --release`)
+[profile.release]
+opt-level = 3      # Optimize for speed
+lto = "fat"        # Enable Link-Time Optimization for better performance
+codegen-units = 1  # Slower to compile, but produces faster code
+panic = "abort"    # Abort on panic for smaller binary size and predictability
+strip = true       # Strip symbols from the binary to reduce size
+
+# Test profile (used for `cargo test`)
+[profile.test]
+opt-level = 1
+debug = true
+
+# Benchmark profile (used for `cargo bench`)
+[profile.bench]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+
+[workspace.lints.rust]
+# 這裡的 key 就是 lint group / lint name  
+# value 可以是 "allow" | "warn" | "deny" | "forbid"
+unused = "deny"
+rust_2018_idioms = "deny"
+unused_imports = "deny"
+
+# …依照喜好補
+
+
+=== ./crates/infra_db_postgres/Cargo.toml ===
+[package]
+name = "infra_db_postgres"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+contracts = { path = "../contracts" }
+sqlx = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+
+=== ./crates/infra_db_postgres/src/error.rs ===
+use contracts::{DomainError, InfraError};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum DbError {
+    #[error("Database error: {0}")]
+    Sqlx(#[from] sqlx::Error),
+}
+
+impl From<DbError> for InfraError {
+    fn from(e: DbError) -> Self {
+        match e {
+            DbError::Sqlx(err) => InfraError::Database(err.to_string()),
+        }
+    }
+}
+
+impl From<DbError> for DomainError {
+    fn from(e: DbError) -> Self {
+        match e {
+            DbError::Sqlx(sqlx::Error::RowNotFound) => {
+                DomainError::NotFound("Entity not found".to_string())
+            }
+            DbError::Sqlx(sqlx_err) => {
+                if let Some(db_err) = sqlx_err.as_database_error() {
+                    if db_err.is_unique_violation() {
+                        return DomainError::InvalidOperation("Duplicate entry".to_string());
+                    }
+                }
+                DomainError::InvalidOperation("Database operation failed".to_string())
+            }
+        }
+    }
+}
+
+
+=== ./crates/infra_db_postgres/src/lib.rs ===
+pub mod error;
+pub mod models;
+pub mod user_repo;
+
+
+=== ./crates/infra_db_postgres/src/models.rs ===
+use sqlx::{types::Uuid, FromRow};
+
+#[derive(Debug, FromRow)]
+pub struct UserRow {
+    pub id: Uuid,
+    pub name: String,
+}
+
+
+=== ./crates/infra_db_postgres/src/user_repo.rs ===
+use crate::error::DbError;
+use crate::models::UserRow;
+use async_trait::async_trait;
+use contracts::ports::{DomainError, User, UserRepository};
+use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
+use uuid::Uuid;
+
+#[derive(Clone)]
+pub struct PostgresUserRepository {
+    pool: Pool<Postgres>,
+}
+
+impl PostgresUserRepository {
+    pub async fn new(url: &str, max_conn: u32) -> Result<Self, DbError> {
+        let pool = PgPoolOptions::new()
+            .max_connections(max_conn)
+            .connect(url)
+            .await?;
+        Ok(Self { pool })
+    }
+}
+
+#[async_trait]
+impl UserRepository for PostgresUserRepository {
+    async fn find(&self, id: &Uuid) -> Result<User, DomainError> {
+        let row: UserRow = sqlx::query_as!(UserRow, "SELECT id, name FROM users WHERE id = $1", id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| DomainError::from(DbError::from(e)))?;
+        Ok(User {
+            id: row.id,
+            name: row.name,
+        })
+    }
+
+    async fn save(&self, user: &User) -> Result<(), DomainError> {
+        sqlx::query!(
+            r#"INSERT INTO users (id, name) VALUES ($1, $2)
+               ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name"#,
+            user.id,
+            user.name
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::from(DbError::from(e)))?;
+        Ok(())
+    }
+
+    async fn shutdown(&self) {
+        self.pool.close().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_user_conversion() {
+        let user_row = UserRow {
+            id: Uuid::new_v4(),
+            name: "Test User".to_string(),
+        };
+
+        let user = User {
+            id: user_row.id,
+            name: user_row.name.clone(),
+        };
+
+        assert_eq!(user.name, "Test User");
+        assert_eq!(user.id, user_row.id);
+    }
+}
+
+
+=== ./crates/contracts/Cargo.toml ===
+[package]
+name = "contracts"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+domain = { path = "../domain" }
+prometheus = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+uuid = { workspace = true }
+mockall = { workspace = true, optional = true }
+
+[features]
+default = []
+testing = ["mockall"]
+
+
+=== ./crates/contracts/src/ports.rs ===
+use async_trait::async_trait;
+use std::sync::Arc;
+
+// Re-export domain types
+pub use domain::{error::DomainError, user::User};
+pub use uuid::Uuid;
+
+//=== Repository Ports ===//
+#[async_trait]
+#[cfg_attr(any(test, feature = "testing"), mockall::automock)]
+pub trait UserRepository: Send + Sync {
+    async fn find(&self, id: &Uuid) -> Result<User, DomainError>;
+    async fn save(&self, user: &User) -> Result<(), DomainError>;
+    async fn shutdown(&self);
+}
+
+//=== Observability Ports ===//
+#[async_trait]
+#[cfg_attr(any(test, feature = "testing"), mockall::automock)]
+pub trait ObservabilityPort: Send + Sync {
+    async fn on_request_start(&self, method: &str, path: &str);
+    async fn on_request_end(&self, method: &str, path: &str, status: u16, latency: f64);
+}
+
+//=== Configuration Ports ===//
+pub trait ConfigProvider: Send + Sync {
+    type Config;
+    fn get_config(&self) -> &Self::Config;
+}
+
+//=== Registry Ports ===//
+pub trait MetricsRegistry: Send + Sync {
+    fn registry(&self) -> &prometheus::Registry;
+}
+
+//=== Type Aliases ===//
+pub type DynUserRepo = Arc<dyn UserRepository>;
+pub type DynObservability = Arc<dyn ObservabilityPort>;
+pub type DynMetricsRegistry = Arc<dyn MetricsRegistry>;
+
+
+=== ./crates/contracts/src/error.rs ===
+use domain::error::DomainError;
+use thiserror::Error;
+
+/// 統一的應用錯誤類型
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("Domain error: {0}")]
+    Domain(#[from] DomainError),
+
+    #[error("Infrastructure error: {0}")]
+    Infrastructure(#[from] InfraError),
+
+    #[error("Application error: {0}")]
+    Application(String),
+
+    #[error("Validation error: {0}")]
+    Validation(String),
+}
+
+#[derive(Debug, Error)]
+pub enum InfraError {
+    #[error("Database error: {0}")]
+    Database(String),
+
+    #[error("Network error: {0}")]
+    Network(String),
+
+    #[error("Configuration error: {0}")]
+    Config(String),
+}
+
+/// HTTP 狀態碼映射
+impl AppError {
+    pub fn status_code(&self) -> u16 {
+        match self {
+            AppError::Domain(DomainError::NotFound(_)) => 404,
+            AppError::Domain(DomainError::BusinessRule(_)) => 400,
+            AppError::Domain(DomainError::InvalidOperation(_)) => 400,
+            AppError::Domain(DomainError::Validation(_)) => 400,
+            AppError::Validation(_) => 400,
+            AppError::Infrastructure(_) => 500,
+            AppError::Application(_) => 500,
+        }
+    }
+}
+
+// 向後兼容
+pub type CoreError = AppError;
+
+
+=== ./crates/contracts/src/lib.rs ===
+pub mod error;
+pub mod ports;
+
+pub use domain::error::DomainError;
+pub use error::{AppError, CoreError, InfraError};
+pub use ports::*;
+
+
+=== ./crates/infra_telemetry/Cargo.toml ===
+[package]
+name = "infra_telemetry"
+version = "0.1.0"
+edition = "2021"
+publish = false
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT OR Apache-2.0"
+description = "Infrastructure adapter for telemetry (tracing, OpenTelemetry, Prometheus) in hexagonal Axum architecture."
+repository = "https://github.com/your-username/axum_hexagonal_template"
+
+[lib]
+# 標準 library crate
+
+[dependencies]
+axum = { workspace = true }
+# --- Telemetry 與 Logging ---
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry-semantic-conventions = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+prometheus = { workspace = true }
+
+# --- 基本公用套件 ---
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+# once_cell = { workspace = true } # Not used in this crate's library code
+
+# --- Serde (僅序列化需要, 如有) ---
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# --- Configuration 支援 (如需) ---
+figment = { workspace = true, optional = true }
+dotenvy = { workspace = true, optional = true }
+
+# --- Async Runtime ---
+tokio = { workspace = true, optional = true }
+
+# --- Domain / Application trait 引用（如需）---
+# domain = { path = "../../domain", optional = true }
+contracts = { path = "../contracts" }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tracing-futures = { workspace = true }
+reqwest = { workspace = true }
+
+[features]
+default = []
+
+
+[package.metadata]
+# 可選，便於自動化工具掃描
+
+# ===================================================================
+#                     Build Dependencies
+# ===================================================================
+
+[build-dependencies]
+vergen = { version = "8", features = ["build", "git", "gitcl"] }
+
+
+=== ./crates/infra_telemetry/src/telemetry.rs ===
+// src/infrastructure/telemetry.rs
+
+use crate::config::TelemetryConfig;
+use crate::error::TelemetryError;
+
+use opentelemetry::{
+    global,
+    trace::{TraceError, TracerProvider},
+    KeyValue,
+};
+use opentelemetry_otlp::WithExportConfig;
+
+use opentelemetry_sdk::{metrics::SdkMeterProvider, trace::SdkTracerProvider, Resource};
+use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
+use std::panic::PanicHookInfo;
+use tracing::info;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
+/// 使用 Pipeline Builder 初始化 OTLP 追踪器。
+fn init_tracer_provider(
+    config: &TelemetryConfig,
+    resource: Resource,
+) -> Result<SdkTracerProvider, TraceError> {
+    let otlp_exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_http()
+        .with_endpoint(&config.otel_exporter_otlp_endpoint)
+        .build()?;
+
+    Ok(opentelemetry_sdk::trace::SdkTracerProvider::builder()
+        .with_resource(resource)
+        .with_simple_exporter(otlp_exporter)
+        .with_sampler(opentelemetry_sdk::trace::Sampler::AlwaysOn)
+        .build())
+}
+
+/// 初始化 `tracing` subscriber，並集成 OpenTelemetry layer。
+fn init_subscriber(config: &TelemetryConfig, provider: SdkTracerProvider) {
+    let tracer = provider.tracer("tracing-opentelemetry");
+    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+
+    global::set_tracer_provider(provider);
+
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(config.log_level.clone()));
+
+    let formatter = tracing_subscriber::fmt::layer()
+        .json()
+        .with_current_span(true)
+        .with_span_list(true);
+
+    Registry::default()
+        .with(env_filter)
+        .with(formatter)
+        .with(otel_layer)
+        .init();
+
+    info!("OpenTelemetry layer initialized.");
+}
+
+/// 全局 Panic Hook
+pub fn panic_hook(panic_info: &PanicHookInfo) {
+    let payload = panic_info
+        .payload()
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| {
+            panic_info
+                .payload()
+                .downcast_ref::<String>()
+                .map(|s| s.as_str())
+        })
+        .unwrap_or("unknown panic payload");
+
+    let location = panic_info.location().map(|loc| loc.to_string());
+    let backtrace = std::backtrace::Backtrace::capture();
+
+    tracing::error!(
+        target: "panic",
+        payload = payload,
+        location = ?location,
+        backtrace = ?backtrace,
+        "A panic occurred"
+    );
+}
+
+/// 完整的遙測初始化流程
+pub fn init_telemetry(config: &TelemetryConfig) -> Result<prometheus::Registry, TelemetryError> {
+    let resource = Resource::builder()
+        .with_attributes(vec![KeyValue::new(
+            SERVICE_NAME,
+            config.otel_service_name.clone(),
+        )])
+        .build();
+
+    let registry = prometheus::Registry::new();
+
+    // --- 初始化指標系統 (使用 opentelemetry-prometheus) ---
+    // 1. 創建 Prometheus 導出器
+    let prometheus_exporter = opentelemetry_prometheus::exporter()
+        .with_registry(registry.clone()) // <- 使用新的 Registry
+        .build()
+        .map_err(|e| TelemetryError::MetricsInit(e.to_string()))?;
+
+    // 初始化指標系統
+    let meter_provider = SdkMeterProvider::builder()
+        .with_resource(resource.clone()) // resource 可以被克隆
+        .with_reader(prometheus_exporter)
+        .build();
+
+    global::set_meter_provider(meter_provider);
+
+    info!("Metrics system (Prometheus exporter) initialized.");
+
+    // 初始化追踪系統
+    let tracer_provider = init_tracer_provider(config, resource)
+        .map_err(|e| TelemetryError::TelemetryInit(e.to_string()))?;
+
+    // 初始化日誌系統並與追踪集成
+    init_subscriber(config, tracer_provider);
+
+    info!("Telemetry initialized successfully.");
+    Ok(registry)
+}
+
+
+=== ./crates/infra_telemetry/src/error.rs ===
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum TelemetryError {
+    #[error("Telemetry initialization failed: {0}")]
+    TelemetryInit(String),
+    #[error("Telemetry (Metrics) initialization failed: {0}")]
+    MetricsInit(String),
+}
+
+
+=== ./crates/infra_telemetry/src/config.rs ===
+// infra_telemetry/src/config.rs
+
+//! Telemetry (tracing, metrics) 相關設定
+//! 此檔僅定義 Telemetry Adapter 所需的設定 struct 與介面。
+
+use serde::Deserialize;
+
+/// Telemetry 相關配置。
+/// 注意：此 Config 僅限 Telemetry Adapter 需要的設定，與全域 Config 解耦。
+#[derive(Debug, Clone, Deserialize)]
+pub struct TelemetryConfig {
+    /// 服務名稱（用於 tracing、Prometheus 標籤）
+    pub otel_service_name: String,
+
+    /// OTLP Endpoint (tracing)
+    pub otel_exporter_otlp_endpoint: String,
+
+    /// Prometheus metrics HTTP 路徑
+    #[serde(default = "default_prometheus_path")]
+    pub prometheus_path: String,
+
+    /// 日誌等級（trace/debug/info/warn/error）
+    #[serde(default = "default_log_level")]
+    pub log_level: String,
+}
+
+fn default_prometheus_path() -> String {
+    "/metrics".to_string()
+}
+
+fn default_log_level() -> String {
+    "info".to_string()
+}
+
+impl TelemetryConfig {
+    /// 可選：從 env 或 toml 讀取 Telemetry 設定（非強制）
+    /// Marked for test use only to enforce DI for main application flow.
+    #[cfg(test)]
+    pub fn from_env() -> Self {
+        use std::env;
+        TelemetryConfig {
+            otel_service_name: env::var("TELEMETRY_SERVICE_NAME").unwrap_or_else(|_| "app".into()),
+            otel_exporter_otlp_endpoint: env::var("TELEMETRY_OTLP_ENDPOINT")
+                .unwrap_or_else(|_| "http://localhost:4317".into()),
+            prometheus_path: env::var("TELEMETRY_PROMETHEUS_PATH")
+                .unwrap_or_else(|_| default_prometheus_path()),
+            log_level: env::var("TELEMETRY_LOG_LEVEL").unwrap_or_else(|_| default_log_level()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_values() {
+        // Renamed for clarity as from_env is now test-only
+        let cfg = TelemetryConfig {
+            otel_service_name: "svc".into(),
+            otel_exporter_otlp_endpoint: "http://otlp".into(),
+            prometheus_path: default_prometheus_path(),
+            log_level: default_log_level(),
+        };
+        assert_eq!(cfg.prometheus_path, "/metrics");
+        assert_eq!(cfg.log_level, "info");
+    }
+
+    #[test]
+    #[cfg(test)] // This test specifically uses from_env
+    fn test_from_env_defaults() {
+        // 清理環境變數
+        std::env::remove_var("TELEMETRY_SERVICE_NAME");
+        std::env::remove_var("TELEMETRY_OTLP_ENDPOINT");
+        std::env::remove_var("TELEMETRY_PROMETHEUS_PATH");
+        std::env::remove_var("TELEMETRY_LOG_LEVEL");
+        let cfg = TelemetryConfig::from_env();
+        assert_eq!(cfg.otel_service_name, "app");
+        assert_eq!(cfg.otel_exporter_otlp_endpoint, "http://localhost:4317");
+        assert_eq!(cfg.prometheus_path, "/metrics");
+        assert_eq!(cfg.log_level, "info");
+    }
+}
+
+
+=== ./crates/infra_telemetry/src/lib.rs ===
+pub mod config;
+pub mod error;
+pub mod metrics;
+pub mod telemetry; // 👈 新增
+
+
+=== ./crates/infra_telemetry/src/metrics.rs ===
+use async_trait::async_trait;
+use opentelemetry::{
+    global,
+    metrics::{Counter, Histogram},
+    KeyValue,
+};
+
+const SERVICE_NAME: &str = "rust-service-scaffold";
+const HTTP_REQUESTS_TOTAL: &str = "http_requests_total";
+const HTTP_REQUESTS_DURATION: &str = "http_requests_duration_seconds";
+const HTTP_REQUESTS_IN_FLIGHT: &str = "http_requests_in_flight";
+
+#[derive(Clone)]
+pub struct Metrics {
+    http_requests_total: Counter<u64>,
+    http_requests_duration_seconds: Histogram<f64>,
+    http_requests_in_flight: opentelemetry::metrics::UpDownCounter<i64>,
+}
+
+impl Metrics {
+    pub fn new() -> Self {
+        let meter = global::meter(SERVICE_NAME);
+        Self {
+            http_requests_total: meter
+                .u64_counter(HTTP_REQUESTS_TOTAL)
+                .with_description("Total HTTP requests")
+                .build(),
+            http_requests_duration_seconds: meter
+                .f64_histogram(HTTP_REQUESTS_DURATION)
+                .with_description("HTTP request latency in seconds")
+                .build(),
+            http_requests_in_flight: meter
+                .i64_up_down_counter(HTTP_REQUESTS_IN_FLIGHT)
+                .with_description("Number of in-flight HTTP requests")
+                .build(),
+        }
+    }
+
+    fn create_labels(method: &str, path: &str) -> Vec<KeyValue> {
+        vec![
+            KeyValue::new("method", method.to_owned()),
+            KeyValue::new("path", path.to_owned()),
+        ]
+    }
+
+    fn create_labels_with_status(method: &str, path: &str, status: u16) -> Vec<KeyValue> {
+        vec![
+            KeyValue::new("method", method.to_owned()),
+            KeyValue::new("path", path.to_owned()),
+            KeyValue::new("status", status.to_string()),
+        ]
+    }
+
+    pub fn on_request_start(&self, method: &str, path: &str) {
+        let labels = Self::create_labels(method, path);
+        self.http_requests_in_flight.add(1, &labels);
+    }
+
+    pub fn on_request_end(&self, method: &str, path: &str, status: u16, latency: f64) {
+        let base_labels = Self::create_labels(method, path);
+        let status_labels = Self::create_labels_with_status(method, path, status);
+
+        self.http_requests_in_flight.add(-1, &base_labels);
+        self.http_requests_total.add(1, &status_labels);
+        self.http_requests_duration_seconds
+            .record(latency, &status_labels);
+    }
+}
+
+impl Default for Metrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl contracts::ports::ObservabilityPort for Metrics {
+    async fn on_request_start(&self, method: &str, path: &str) {
+        Metrics::on_request_start(self, method, path);
+    }
+
+    async fn on_request_end(&self, method: &str, path: &str, status: u16, latency: f64) {
+        Metrics::on_request_end(self, method, path, status, latency);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_metrics_creation() {
+        let metrics = Metrics::new();
+        // 測試指標對象創建成功 - 檢查結構體存在
+        let _counter = &metrics.http_requests_total;
+        let _histogram = &metrics.http_requests_duration_seconds;
+        let _gauge = &metrics.http_requests_in_flight;
+        // 測試通過表示指標已正確初始化
+    }
+
+    #[test]
+    fn test_create_labels() {
+        let labels = Metrics::create_labels("GET", "/api/users");
+        assert_eq!(labels.len(), 2);
+        assert_eq!(labels[0].key.as_str(), "method");
+        assert_eq!(labels[1].key.as_str(), "path");
+    }
+
+    #[test]
+    fn test_create_labels_with_status() {
+        let labels = Metrics::create_labels_with_status("POST", "/api/users", 201);
+        assert_eq!(labels.len(), 3);
+        assert_eq!(labels[2].key.as_str(), "status");
+    }
+}
+
+
+=== ./crates/application/Cargo.toml ===
+# axum_hexagonal_template/crates/application/Cargo.toml
+
+[package]
+name = "application"
+version = "0.1.0"
+edition = "2021"
+publish = false # Prevent accidental publishing
+authors = ["Your Name <your.email@example.com>"]                                                     # <-- 請修改為你的資訊
+description = "Contains application services (use cases) and defines ports (traits) for the domain."
+license = "MIT OR Apache-2.0"                                                                        # 或者你選擇的許可證
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+contracts = { path = "../contracts", features = ["testing"] }
+domain = { path = "../domain" }
+
+
+# 用於異步 trait，使我們可以在 trait 方法中使用 async
+async-trait = { workspace = true } # 使用最新的穩定版本
+
+# 錯誤處理庫，用於定義應用層的錯誤
+thiserror = { workspace = true }
+
+# 用於 DTOs 的驗證，如果你的 application/dto.rs 中有使用
+validator = { workspace = true } # 使用最新的穩定版本，並啟用 derive 功能
+
+uuid = { workspace = true }
+# 可選：如果應用層有需要日誌，這裡可以使用 tracing 門面，但不要包含 tracing-subscriber
+# tracing = "0.1.40"
+
+[dev-dependencies]
+mockall = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+
+=== ./crates/application/src/error.rs ===
+// Re-export unified error from contracts
+pub use contracts::AppError;
+
+
+=== ./crates/application/src/lib.rs ===
+#![deny(
+    bad_style,
+    future_incompatible,
+    nonstandard_style,
+    rust_2018_idioms,
+    unreachable_pub,
+    unused
+)]
+
+pub mod container;
+pub mod error;
+pub mod use_cases;
+
+// Re-export contracts for convenience
+pub use container::*;
+pub use contracts::ports::*;
+
+
+=== ./crates/application/src/use_cases/create_user.rs ===
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use contracts::{
+    ports::{User, UserRepository},
+    DomainError,
+};
+use uuid::{timestamp::context, Timestamp, Uuid};
+
+#[derive(Debug)]
+pub struct CreateUserCmd {
+    pub name: String,
+}
+pub trait HasCreateUserUc: Send + Sync {
+    fn create_user_uc(&self) -> Arc<dyn CreateUserUseCase>;
+}
+
+#[async_trait]
+pub trait CreateUserUseCase: Send + Sync {
+    async fn exec(&self, cmd: CreateUserCmd) -> Result<User, DomainError>;
+}
+
+// 具體實作
+
+pub struct UserSvc {
+    repo: Arc<dyn UserRepository>,
+}
+
+impl UserSvc {
+    pub fn new(repo: Arc<dyn UserRepository>) -> Self {
+        Self { repo }
+    }
+}
+
+#[async_trait]
+impl CreateUserUseCase for UserSvc {
+    async fn exec(&self, cmd: CreateUserCmd) -> Result<User, DomainError> {
+        // 1) 業務驗證
+        if cmd.name.trim().is_empty() {
+            return Err(DomainError::Validation("name cannot be empty".into()));
+        }
+
+        // 2) 建立 Domain 物件
+        let user = User {
+            id: Uuid::new_v7(Timestamp::now(context::ContextV7::new())),
+            name: cmd.name,
+        };
+
+        // 3) 儲存
+        self.repo.save(&user).await?;
+
+        Ok(user)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use contracts::ports::MockUserRepository;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_create_user_success() {
+        let mut mock_repo = MockUserRepository::new();
+        mock_repo
+            .expect_save()
+            .times(1)
+            .returning(|_| Box::pin(async { Ok(()) }));
+
+        let use_case = UserSvc::new(Arc::new(mock_repo));
+        let cmd = CreateUserCmd {
+            name: "Test User".to_string(),
+        };
+
+        let result = use_case.exec(cmd).await;
+        assert!(result.is_ok());
+    }
+}
+
+
+=== ./crates/application/src/use_cases/create_user_test.rs ===
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use contracts::ports::MockUserRepository;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_create_user_success() {
+        // Arrange
+        let mut mock_repo = MockUserRepository::new();
+        mock_repo
+            .expect_save()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let use_case = UserSvc::new(Arc::new(mock_repo));
+        let cmd = CreateUserCmd {
+            name: "Test User".to_string(),
+        };
+
+        // Act
+        let result = use_case.exec(cmd).await;
+
+        // Assert
+        assert!(result.is_ok());
+        let user = result.unwrap();
+        assert_eq!(user.name, "Test User");
+    }
+
+    #[tokio::test]
+    async fn test_create_user_empty_name() {
+        // Arrange
+        let mock_repo = MockUserRepository::new();
+        let use_case = UserSvc::new(Arc::new(mock_repo));
+        let cmd = CreateUserCmd {
+            name: "".to_string(),
+        };
+
+        // Act
+        let result = use_case.exec(cmd).await;
+
+        // Assert
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            DomainError::Validation(msg) => assert_eq!(msg, "name cannot be empty"),
+            _ => panic!("Expected validation error"),
+        }
+    }
+}
+
+=== ./crates/application/src/use_cases/mod.rs ===
+pub mod create_user;
+
+
+=== ./crates/application/src/container.rs ===
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use crate::use_cases::create_user::{CreateUserUseCase, UserSvc};
+use contracts::ports::{DynObservability, DynUserRepo};
+
+/// 改進的依賴注入容器
+pub struct Container {
+    // 基礎設施依賴
+    user_repo: DynUserRepo,
+    observability: DynObservability,
+
+    // 用例註冊表
+    use_cases: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+}
+
+impl Container {
+    pub fn new(user_repo: DynUserRepo, observability: DynObservability) -> Self {
+        let mut container = Self {
+            user_repo: user_repo.clone(),
+            observability,
+            use_cases: HashMap::new(),
+        };
+
+        // 註冊預設用例
+        let create_user_uc: Arc<dyn CreateUserUseCase> = Arc::new(UserSvc::new(user_repo));
+        container.register_use_case(create_user_uc);
+
+        container
+    }
+
+    /// 註冊用例
+    pub fn register_use_case<T>(&mut self, use_case: Arc<T>)
+    where
+        T: Send + Sync + 'static + ?Sized,
+    {
+        self.use_cases.insert(TypeId::of::<T>(), Box::new(use_case));
+    }
+
+    /// 獲取用例
+    pub fn get_use_case<T>(&self) -> Option<Arc<T>>
+    where
+        T: Send + Sync + 'static + ?Sized,
+    {
+        self.use_cases
+            .get(&TypeId::of::<T>())?
+            .downcast_ref::<Arc<T>>()
+            .cloned()
+    }
+}
+
+/// 提供用例的 trait
+pub trait HasCreateUserUc {
+    fn create_user_uc(&self) -> Arc<dyn CreateUserUseCase>;
+}
+
+impl HasCreateUserUc for Container {
+    fn create_user_uc(&self) -> Arc<dyn CreateUserUseCase> {
+        self.get_use_case::<dyn CreateUserUseCase>()
+            .expect("CreateUserUseCase not registered")
+    }
+}
+
+/// 提供可觀測性的 trait
+pub trait HasObservability {
+    fn observability(&self) -> contracts::ports::DynObservability;
+}
+
+impl HasObservability for Container {
+    fn observability(&self) -> contracts::ports::DynObservability {
+        self.observability.clone()
+    }
+}
+
+/// 提供儲存庫的 trait (內部使用)
+pub trait HasUserRepo {
+    fn user_repo(&self) -> contracts::ports::DynUserRepo;
+}
+
+impl HasUserRepo for Container {
+    fn user_repo(&self) -> contracts::ports::DynUserRepo {
+        self.user_repo.clone()
+    }
+}
+
+
+=== ./crates/domain/Cargo.toml ===
+# axum_hexagonal_template/crates/domain/Cargo.toml
+
+[package]
+name = "domain"
+version = "0.1.0"
+edition = "2021"
+publish = false # Prevent accidental publishing
+authors = ["Your Name <your.email@example.com>"] # 建議填寫你的名字和郵箱
+description = "Contains core business logic, entities, and domain-specific errors. It should be pure and framework-agnostic."
+repository = "https://github.com/your-username/axum_hexagonal_template" # 建議填寫你的項目倉庫
+license = "MIT OR Apache-2.0" # 選擇一個合適的開源許可證，或移除
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+# `thiserror` 用於定義結構化的、符合 Rust 慣例的錯誤類型
+thiserror = { workspace = true }
+
+# `uuid` 用於生成全域唯一標識符，特別是 UUIDv7
+# 關閉 "serde" 特性以避免 Domain 層直接依賴序列化/反序列化實現細節。
+# 如果需要在 Domain 層的實體上使用 UUID，但又想保持純粹，可以將 UUID 轉換為 String 或 [u8] 存儲。
+# 實際的 serde 處理應發生在 presentation 或 infrastructure 層的 DTOs。
+# `v7` 特性啟用 UUIDv7 的生成，該版本是基於時間的且可排序，對資料庫索引友好。
+# `fast-rng` 啟用更快的隨機數生成器。
+uuid = { workspace = true }
+
+# `itertools` 提供了一些方便的迭代器適配器和實用函數，通常是純運算。
+# 根據實際需要選擇是否包含。
+# itertools = "0.12.0"
+
+# `chrono` 用於處理時間，但如果 Domain 只需 Unix timestamp 或 Duration，
+# 考慮使用更輕量級的 `time` crate 或直接 `u64`。
+# 如果確定 Domain 需要處理日期時間物件，且不介意其大小，則可以包含。
+# chrono = { version = "0.4.34", features = ["serde"] } # 建議關閉 serde，如果需要序列化，在 DTOs 層處理
+
+# 如果 Domain 層需要任何其他純計算、無副作用、無 I/O 的數學或資料結構庫，可以在此添加。
+
+=== ./crates/domain/src/error.rs ===
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum DomainError {
+    #[error("Business rule violation: {0}")]
+    BusinessRule(String),
+
+    #[error("Entity not found: {0}")]
+    NotFound(String),
+
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
+
+    #[error("Validation error: {0}")]
+    Validation(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validation_error() {
+        let error = DomainError::Validation("Invalid input".to_string());
+        assert!(matches!(error, DomainError::Validation(_)));
+        assert_eq!(error.to_string(), "Validation error: Invalid input");
+    }
+
+    #[test]
+    fn test_not_found_error() {
+        let error = DomainError::NotFound("User not found".to_string());
+        assert!(matches!(error, DomainError::NotFound(_)));
+        assert_eq!(error.to_string(), "Entity not found: User not found");
+    }
+
+    #[test]
+    fn test_invalid_operation_error() {
+        let error = DomainError::InvalidOperation("Invalid operation".to_string());
+        assert!(matches!(error, DomainError::InvalidOperation(_)));
+        assert_eq!(error.to_string(), "Invalid operation: Invalid operation");
+    }
+
+    #[test]
+    fn test_business_rule_error() {
+        let error = DomainError::BusinessRule("Business rule violation".to_string());
+        assert!(matches!(error, DomainError::BusinessRule(_)));
+        assert_eq!(
+            error.to_string(),
+            "Business rule violation: Business rule violation"
+        );
+    }
+}
+
+
+=== ./crates/domain/src/lib.rs ===
+#![deny(
+    bad_style,
+    future_incompatible,
+    missing_debug_implementations,
+    nonstandard_style,
+    rust_2018_idioms,
+    unreachable_pub,
+    unused
+)]
+// src/domain/mod.rs
+// 包含核心業務邏輯、實體和領域特定的錯誤。
+// 這一層不應該知道任何關於 Web 框架或數據庫的具體實現。
+pub mod error;
+pub mod user;
+
+
+=== ./crates/domain/src/user.rs ===
+use uuid::Uuid;
+
+//=== Domain Entity ===//
+#[derive(Debug, Clone)]
+pub struct User {
+    pub id: Uuid,
+    pub name: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_user_creation() {
+        let id = Uuid::now_v7();
+        let name = "Test User".to_string();
+
+        let user = User {
+            id,
+            name: name.clone(),
+        };
+
+        assert_eq!(user.id, id);
+        assert_eq!(user.name, name);
+    }
+
+    #[test]
+    fn test_user_clone() {
+        let user = User {
+            id: Uuid::now_v7(),
+            name: "Original".to_string(),
+        };
+
+        let cloned = user.clone();
+        assert_eq!(user.id, cloned.id);
+        assert_eq!(user.name, cloned.name);
+    }
+}
+
+
+=== ./bootstrap/Cargo.toml ===
+[package]
+name = "bootstrap"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "Main binary crate for Axum Hexagonal Template."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# === 自家 Workspace Crates ===
+contracts = { path = "../crates/contracts" }
+application = { path = "../crates/application" }
+infra_db_postgres = { path = "../crates/infra_db_postgres" }
+infra_telemetry = { path = "../crates/infra_telemetry" }
+pres_web_axum = { path = "../presentation/pres_web_axum" }
+
+# === 公用 Library（會自動統一至 workspace 版本）===
+axum = { workspace = true }
+hyper = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tower_governor = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry-semantic-conventions = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+prometheus = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+validator = { workspace = true }
+figment = { workspace = true }
+dotenvy = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+once_cell = { workspace = true }
+uuid = { workspace = true }
+tracing-futures = { workspace = true }
+
+# 只在 binary 需要才額外寫明
+reqwest = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = [
+    "macros",
+    "rt-multi-thread",
+    "test-util",
+] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+reqwest = { workspace = true }
+tower = { version = "0.4.13", features = ["util"] }
+async-trait = { workspace = true } 
+
+[build-dependencies]
+vergen = { workspace = true }
+
+
+=== ./bootstrap/tests/integration_test.rs ===
+use axum::{routing::get, Extension, Router};
+use bootstrap::{
+    config::{self, Config},
+    state::AppState,
+};
+
+use infra_telemetry::telemetry;
+use pres_web_axum::handlers;
+use serde_json::Value;
+use std::{
+    panic,
+    sync::{Arc, Mutex},
+};
+use tokio::time::{sleep, Duration};
+use tower::ServiceExt; // For `oneshot`
+use tower_http::{
+    request_id::{MakeRequestUuid, PropagateRequestIdLayer, RequestId, SetRequestIdLayer},
+    trace::TraceLayer,
+};
+use tracing::subscriber::with_default;
+use tracing_futures::WithSubscriber;
+use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
+// 步驟 1 & 2: 重新引入 Mutex 來序列化 panic hook 測試
+use application::use_cases::create_user::{CreateUserUseCase, UserSvc};
+use axum::body::{to_bytes, Body};
+
+use hyper::{Request, StatusCode};
+use once_cell::sync::Lazy;
+
+// For FakeObs
+use axum::middleware;
+use contracts::ports::DynObservability;
+use pres_web_axum::middleware::telemetry_middleware;
+
+static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+async fn test_handler(Extension(request_id_extension): Extension<RequestId>) -> String {
+    let request_id = request_id_extension
+        .header_value()
+        .to_str()
+        .unwrap_or("unknown")
+        .to_string();
+    tracing::info!(request_id = %request_id, "Test handler processing request");
+    format!("Hello from test! Request ID: {}", request_id)
+}
+
+// 這個測試不涉及全域狀態，保持原樣
+#[tokio::test]
+async fn test_logging_with_request_id() {
+    let writer = TestWriter::new();
+    let writer_for_closure = writer.clone();
+
+    let subscriber = Registry::default().with(EnvFilter::new("trace")).with(
+        fmt::layer()
+            .json()
+            .with_writer(move || writer_for_closure.clone()),
+    );
+
+    async {
+        let test_request_id = "test-id-123";
+        let rid = RequestId::new(hyper::header::HeaderValue::from_static(test_request_id));
+        let mut request = hyper::Request::builder()
+            .uri("/test")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        request.extensions_mut().insert(rid);
+        let app = Router::new()
+            .route("/test", get(test_handler))
+            .layer(TraceLayer::new_for_http());
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        sleep(Duration::from_millis(50)).await;
+    }
+    .with_subscriber(subscriber)
+    .await;
+
+    let logs = writer.get_logs();
+    assert!(logs.contains(r#""request_id":"test-id-123""#));
+}
+
+#[test]
+fn test_panic_hook_logs_details() {
+    // 取得鎖以確保測試串行執行
+    let _guard = TEST_MUTEX.lock().unwrap();
+
+    let writer = TestWriter::new();
+    let writer_for_closure = writer.clone();
+    let subscriber = Registry::default()
+        .with(EnvFilter::new("trace")) // 確保捕獲所有級別的日誌
+        .with(
+            fmt::layer()
+                .json() // 確保輸出是 JSON
+                .with_writer(move || writer_for_closure.clone()),
+        );
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    // 在 tracing subscriber 的上下文中執行異步代碼
+    with_default(subscriber, || {
+        rt.block_on(async {
+            // 設置自定義的 panic hook
+            std::panic::set_hook(Box::new(telemetry::panic_hook));
+
+            // 創建一個簡單的 app，只包含會 panic 的路由
+            let app = Router::new().route("/test_panic", get(handlers::panic_handler));
+
+            // 在一個新的 tokio 任務中發送請求，以模擬 Axum 的運行環境
+            let task_handle = tokio::spawn(async move {
+                let request = hyper::Request::builder()
+                    .uri("/test_panic")
+                    .body(axum::body::Body::empty())
+                    .unwrap();
+                // `oneshot` 會發送請求並等待響應
+                let _ = app.oneshot(request).await;
+            });
+
+            // 等待任務完成。因為 handler 會 panic，所以這裡應該返回 Err
+            let result = task_handle.await;
+            assert!(
+                result.is_err(),
+                "Spawned task should have panicked but did not."
+            );
+
+            // 稍作等待，確保日誌有時間被處理和寫入
+            sleep(Duration::from_millis(150)).await;
+        });
+    });
+
+    // 獲取所有日誌
+    let logs = writer.get_logs();
+
+    // 添加調試輸出，這在 CI 環境中尤其有用
+    if logs.is_empty() {
+        panic!("FAILED: No logs were captured!");
+    }
+    println!("--- CAPTURED LOGS ---\n{}\n--- END LOGS ---", logs);
+
+    // 解析日誌並進行精確斷言
+    let mut panic_log_found = false;
+    for line in logs.lines().filter(|l| !l.is_empty()) {
+        let log_entry: Value = serde_json::from_str(line)
+            .unwrap_or_else(|e| panic!("Failed to parse log line as JSON: {}\nLine: {}", e, line));
+
+        // 我們要找的是由 panic_hook 產生的日誌
+        if log_entry["target"] == "panic" {
+            panic_log_found = true;
+
+            // 斷言日誌級別
+            assert_eq!(
+                log_entry["level"], "ERROR",
+                "Panic log level should be ERROR"
+            );
+
+            // 斷言 panic 的消息負載
+            let payload = log_entry["fields"]["payload"].as_str().unwrap();
+            assert!(
+                payload.contains("This is a test panic deliberately triggered"),
+                "Log message should contain the panic payload"
+            );
+
+            // 斷言 panic 的位置信息
+            let location = log_entry["fields"]["location"].as_str().unwrap();
+            assert!(
+                location.contains("presentation/pres_web_axum/src/handlers/main.rs"),
+                "Log should contain the correct panic location"
+            );
+
+            break; // 找到後即可退出循環
+        }
+    }
+
+    // 最終斷言，確保我們確實找到了目標日log
+    assert!(
+        panic_log_found,
+        "The detailed panic log (target='panic') was not found in the captured logs."
+    );
+}
+
+#[test]
+fn unit_test_logging_module() {
+    let _guard = TEST_MUTEX.lock().unwrap();
+
+    let writer = TestWriter::new();
+    let writer_for_closure = writer.clone();
+    let subscriber = Registry::default().with(EnvFilter::new("trace")).with(
+        fmt::layer()
+            .json()
+            .with_writer(move || writer_for_closure.clone()),
+    );
+
+    with_default(subscriber, || {
+        let original_hook = panic::take_hook();
+        panic::set_hook(Box::new(telemetry::panic_hook));
+        let _ = panic::catch_unwind(|| {
+            panic!("this is a unit test panic");
+        });
+        panic::set_hook(original_hook);
+    });
+
+    let logs = writer.get_logs();
+    assert!(
+        !logs.is_empty(),
+        "Panic hook should have produced logs, but none were found."
+    );
+
+    let mut panic_details_log_found = false;
+    for line in logs.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let log_entry: Value = serde_json::from_str(line)
+            .unwrap_or_else(|_| panic!("Log line should be valid JSON. Failed on line: {}", line));
+
+        if let Some(message) = log_entry["fields"]["message"].as_str() {
+            if message == "A panic occurred" {
+                panic_details_log_found = true;
+
+                assert_eq!(log_entry["level"], "ERROR", "Log level should be ERROR");
+                assert_eq!(log_entry["target"], "panic", "Log target should be 'panic'");
+
+                let payload = log_entry["fields"]["payload"].as_str().unwrap();
+                assert!(
+                    payload.contains("this is a unit test panic"),
+                    "Log message should contain the panic payload"
+                );
+
+                // **修正**: 检查 location 字段是一个非空的字符串
+                let location_field = &log_entry["fields"]["location"];
+                assert!(
+                    location_field.is_string(),
+                    "Log 'location' field should be a string."
+                );
+                assert!(
+                    !location_field.as_str().unwrap().is_empty(),
+                    "Log 'location' field should not be empty."
+                );
+
+                break;
+            }
+        }
+    }
+
+    assert!(
+        panic_details_log_found,
+        "The detailed panic log ('A panic occurred') was not found."
+    );
+}
+
+#[test]
+fn test_global_panic_hook_logs_from_tokio_task() {
+    // 取得鎖以確保測試串行執行
+    let _guard = TEST_MUTEX.lock().unwrap();
+
+    let writer = TestWriter::new();
+    let writer_for_closure = writer.clone();
+    let subscriber = Registry::default().with(EnvFilter::new("trace")).with(
+        fmt::layer()
+            .json()
+            .with_writer(move || writer_for_closure.clone()),
+    );
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    // 在 tracing subscriber 的上下文中執行異步代碼
+    with_default(subscriber, || {
+        rt.block_on(async {
+            // 設置自定義的 panic hook
+            std::panic::set_hook(Box::new(telemetry::panic_hook));
+
+            // 在一個新的 tokio 任務中直接觸發 panic
+            let task_handle = tokio::spawn(async move {
+                panic!("Panic from a detached tokio task for global hook test");
+            });
+
+            // 等待任務完成。因為任務會 panic，所以這裡應該返回 Err
+            let result = task_handle.await;
+            assert!(result.is_err(), "Spawned task did not panic as expected.");
+
+            // 稍作等待，確保日誌有時間被處理和寫入
+            sleep(Duration::from_millis(150)).await;
+        });
+    });
+
+    // 獲取所有日誌
+    let logs = writer.get_logs();
+
+    // 添加調試輸出
+    if logs.is_empty() {
+        panic!("FAILED: No logs were captured!");
+    }
+    println!(
+        "--- CAPTURED LOGS (global_panic_hook) ---\n{}\n--- END LOGS ---",
+        logs
+    );
+
+    // 解析日誌並進行精確斷言
+    let mut panic_log_found = false;
+    for line in logs.lines().filter(|l| !l.is_empty()) {
+        let log_entry: Value = serde_json::from_str(line)
+            .unwrap_or_else(|e| panic!("Failed to parse log line as JSON: {}\nLine: {}", e, line));
+
+        // 尋找由 panic_hook 產生的日誌
+        if log_entry["target"] == "panic" {
+            panic_log_found = true;
+
+            assert_eq!(
+                log_entry["level"], "ERROR",
+                "Panic log level should be ERROR"
+            );
+
+            // 斷言 panic 的消息負載
+            let payload = log_entry["fields"]["payload"].as_str().unwrap();
+            assert!(
+                payload.contains("Panic from a detached tokio task for global hook test"),
+                "Log message should contain the correct panic payload"
+            );
+
+            // 斷言 panic 的位置信息
+            // 這次 panic 發生在測試文件自身
+            let location = log_entry["fields"]["location"].as_str().unwrap();
+            assert!(
+                location.contains("tests/integration_test.rs"),
+                "Log should contain the correct panic location (in the test file)"
+            );
+
+            break;
+        }
+    }
+
+    // 最終斷言
+    assert!(
+        panic_log_found,
+        "The detailed panic log (target='panic') was not found in the captured logs."
+    );
+}
+
+mod common;
+use common::{FakeObservability, FakeUserRepository, TestWriter};
+
+#[tokio::test]
+async fn test_structured_error_response() {
+    // Arrange
+    let test_config = Arc::new(Config {
+        port: 8080,
+        log_level: "info".to_string(),
+        otel_exporter_otlp_endpoint: "http://localhost:4317".to_string(),
+        otel_service_name: "test-service".to_string(),
+        rate_limit_per_second: 1,
+        rate_limit_burst_size: 50,
+        http_headers: Some(vec![config::HttpHeader {
+            name: "X-Test-Header".to_string(),
+            value: "TestValue".to_string(),
+        }]),
+        database_url: "postgres://user:password@localhost/test_db".to_string(),
+        db_max_conn: 10,
+    });
+    let registry = prometheus::Registry::new();
+    let mock_repo = Arc::new(FakeUserRepository);
+    let _create_user_uc: Arc<dyn CreateUserUseCase> = Arc::new(UserSvc::new(mock_repo.clone()));
+
+    let fake_obs_instance = Arc::new(FakeObservability::new());
+    let _obs_port_for_app_state: DynObservability = fake_obs_instance.clone(); // Clone for AppState
+    let obs_port_for_extension: DynObservability = fake_obs_instance.clone(); // Clone for Extension layer
+
+    let container =
+        application::Container::new(Arc::new(FakeUserRepository), fake_obs_instance.clone());
+
+    let app_state = AppState {
+        config: test_config.clone(),
+        registry: Arc::new(registry),
+        container: Arc::new(container),
+    };
+
+    // ✅ 修正: 複製 main application 的 middleware stack
+    // 這樣可以確保 `RequestId` extension 在 handler 中可用。
+    // AND adding telemetry middleware with FakeObs
+    let app = Router::new()
+        .route("/", get(handlers::main_handler::<AppState>))
+        .layer(
+            // Layers from common_layers in app.rs, adapted for test
+            tower::ServiceBuilder::new()
+                .layer(axum::extract::Extension(obs_port_for_extension)) // Inject FakeObs via Extension
+                .layer(middleware::from_fn(
+                    telemetry_middleware::axum_metrics_middleware,
+                ))
+                .layer(TraceLayer::new_for_http())
+                .layer(PropagateRequestIdLayer::x_request_id())
+                .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid)), // Removed GovernorLayer for simplicity in this test
+        )
+        .with_state(app_state);
+
+    // Act
+    let request = Request::builder()
+        .uri("/?make_error=true")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+
+    // Assert
+    // 現在這個斷言應該會成功，因為 handler 會被正確執行並返回 AppError::Validation
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // ✅ 修正: 為 `to_bytes` 函數提供一個合理的 body 大小限制（例如 64KB）。
+    const BODY_LIMIT: usize = 65_536; // 64KB
+    let body_bytes = to_bytes(response.into_body(), BODY_LIMIT).await.unwrap();
+
+    let body_json: Value =
+        serde_json::from_slice(&body_bytes).expect("Response body should be valid JSON");
+
+    assert_eq!(body_json["error"]["code"], "VALIDATION_ERROR");
+    assert_eq!(
+        body_json["error"]["message"],
+        "Domain error: Validation error: User triggered a bad request"
+    );
+
+    // Assert FakeObs calls
+    assert_eq!(
+        fake_obs_instance.get_request_start_calls(),
+        1,
+        "on_request_start should have been called once"
+    );
+    assert_eq!(
+        fake_obs_instance.get_request_end_calls(),
+        1,
+        "on_request_end should have been called once"
+    );
+}
+
+// Test for rate limiting
+#[tokio::test]
+async fn test_rate_limiting() {
+    // use ::bootstrap::Application; // This was for a potential alternative way to test, not needed now
+    use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
+
+    // Configure a governor layer similar to the main application
+    // We use a small burst size and short period for faster testing.
+    let governor_conf = Arc::new(
+        GovernorConfigBuilder::default()
+            .burst_size(2) // Allow 2 requests
+            .period(std::time::Duration::from_secs(1)) // Per 1 second
+            .finish()
+            .unwrap(),
+    );
+
+    let app = Router::new()
+        .route("/", get(|| async { "Hello, world!" }))
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid)) // Ensure RequestId is available if Governor uses it
+        .layer(GovernorLayer {
+            config: governor_conf,
+        });
+
+    use axum::extract::connect_info::ConnectInfo;
+    use std::net::SocketAddr;
+
+    let addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
+
+    // Send 2 requests, which should succeed
+    let mut request1 = Request::builder().uri("/").body(Body::empty()).unwrap();
+    request1.extensions_mut().insert(ConnectInfo(addr));
+    let response1 = app.clone().oneshot(request1).await.unwrap();
+    assert_eq!(response1.status(), StatusCode::OK);
+
+    let mut request2 = Request::builder().uri("/").body(Body::empty()).unwrap();
+    request2.extensions_mut().insert(ConnectInfo(addr));
+    let response2 = app.clone().oneshot(request2).await.unwrap();
+    assert_eq!(response2.status(), StatusCode::OK);
+
+    // Send a 3rd request, which should be rate-limited
+    let mut request3 = Request::builder().uri("/").body(Body::empty()).unwrap();
+    request3.extensions_mut().insert(ConnectInfo(addr));
+    let response3 = app.clone().oneshot(request3).await.unwrap();
+    assert_eq!(response3.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    // Wait for the rate limit period to pass (plus a small buffer)
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+
+    // Send another request, which should now succeed
+    let mut request4 = Request::builder().uri("/").body(Body::empty()).unwrap();
+    request4.extensions_mut().insert(ConnectInfo(addr));
+    let response4 = app.oneshot(request4).await.unwrap();
+    assert_eq!(response4.status(), StatusCode::OK);
+}
+
+
+=== ./bootstrap/tests/common/mod.rs ===
+use async_trait::async_trait;
+use contracts::ports::{DomainError, ObservabilityPort, User, UserRepository};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex,
+};
+use uuid::Uuid;
+
+#[derive(Default)]
+pub struct FakeUserRepository;
+
+#[async_trait]
+impl UserRepository for FakeUserRepository {
+    async fn find(&self, id: &Uuid) -> Result<User, DomainError> {
+        Ok(User {
+            id: *id,
+            name: "Test User".to_string(),
+        })
+    }
+
+    async fn save(&self, _user: &User) -> Result<(), DomainError> {
+        Ok(())
+    }
+
+    async fn shutdown(&self) {}
+}
+
+#[derive(Clone, Default)]
+pub struct FakeObservability {
+    request_start_calls: Arc<AtomicUsize>,
+    request_end_calls: Arc<AtomicUsize>,
+}
+
+impl FakeObservability {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn get_request_start_calls(&self) -> usize {
+        self.request_start_calls.load(Ordering::SeqCst)
+    }
+
+    pub fn get_request_end_calls(&self) -> usize {
+        self.request_end_calls.load(Ordering::SeqCst)
+    }
+}
+
+#[async_trait]
+impl ObservabilityPort for FakeObservability {
+    async fn on_request_start(&self, _method: &str, _path: &str) {
+        self.request_start_calls.fetch_add(1, Ordering::SeqCst);
+    }
+
+    async fn on_request_end(&self, _method: &str, _path: &str, _status: u16, _latency: f64) {
+        self.request_end_calls.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct TestWriter {
+    buf: Arc<Mutex<Vec<u8>>>,
+}
+
+impl TestWriter {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn get_logs(&self) -> String {
+        String::from_utf8_lossy(&self.buf.lock().unwrap()).to_string()
+    }
+}
+
+impl std::io::Write for TestWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.buf.lock().unwrap().write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.buf.lock().unwrap().flush()
+    }
+}
+
+
+=== ./bootstrap/src/factory.rs ===
+use std::sync::Arc;
+
+use application::Container;
+use contracts::ports::{DynObservability, DynUserRepo};
+use infra_db_postgres::user_repo::PostgresUserRepository;
+use infra_telemetry::metrics::Metrics;
+
+use crate::config::Config;
+
+/// 依賴工廠 - 負責組裝所有依賴
+pub struct DependencyFactory;
+
+impl DependencyFactory {
+    /// 創建完整的依賴容器
+    pub async fn create_container(
+        config: &Config,
+    ) -> Result<Container, Box<dyn std::error::Error>> {
+        // 創建基礎設施適配器
+        let user_repo = Self::create_user_repository(config).await?;
+        let observability = Self::create_observability();
+
+        // 組裝容器
+        Ok(Container::new(user_repo, observability))
+    }
+
+    async fn create_user_repository(
+        config: &Config,
+    ) -> Result<DynUserRepo, Box<dyn std::error::Error>> {
+        let repo = PostgresUserRepository::new(&config.database_url, config.db_max_conn).await?;
+        Ok(Arc::new(repo))
+    }
+
+    fn create_observability() -> DynObservability {
+        Arc::new(Metrics::new())
+    }
+}
+
+
+=== ./bootstrap/src/config.rs ===
+// src/config.rs
+
+use figment::{
+    providers::{Env, Format, Toml},
+    Figment,
+};
+use serde::Deserialize;
+use validator::Validate;
+
+#[derive(Deserialize, Validate, Debug, Clone)]
+pub struct HttpHeader {
+    #[validate(length(min = 1))]
+    pub name: String,
+    #[validate(length(min = 1))]
+    pub value: String,
+}
+
+#[derive(Deserialize, Validate, Debug, Clone)]
+pub struct Config {
+    #[validate(range(min = 1024, max = 65535))]
+    pub port: u16,
+
+    #[validate(length(min = 1))]
+    pub log_level: String,
+
+    #[validate(url)]
+    pub otel_exporter_otlp_endpoint: String,
+
+    #[validate(length(min = 1))]
+    pub otel_service_name: String,
+
+    // <-- 新增: 限流器每秒允許的請求數量
+    #[validate(range(min = 1))]
+    pub rate_limit_per_second: u64,
+
+    // <-- 新增: 限流器允許的突發請求數量
+    #[validate(range(min = 1))]
+    pub rate_limit_burst_size: u32,
+
+    pub http_headers: Option<Vec<HttpHeader>>,
+
+    #[validate(length(min = 1))]
+    pub database_url: String,
+
+    #[validate(range(min = 1))]
+    pub db_max_conn: u32,
+}
+
+impl Config {
+    /// 從文件和環境變量加載配置，並進行驗證
+    pub fn load() -> Result<Self, ConfigError> {
+        let env = std::env::var("APP_ENV").unwrap_or_else(|_| "default".to_string());
+
+        let config: Config = Figment::new()
+            .merge(Toml::file("config/default.toml"))
+            .merge(Toml::file(format!("config/{}.toml", env)))
+            .merge(Env::prefixed("APP_"))
+            .extract()
+            .map_err(|e| ConfigError::Load(Box::new(e)))?;
+
+        config.validate().map_err(ConfigError::Validation)?;
+        Ok(config)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    #[error("Failed to load configuration: {0}")]
+    Load(#[from] Box<figment::Error>),
+
+    #[error("Configuration validation failed: {0}")]
+    Validation(#[from] validator::ValidationErrors),
+}
+
+
+=== ./bootstrap/src/lib.rs ===
+// 聲明 crate 的頂層模塊
+pub mod app;
+pub mod config;
+pub mod factory;
+pub mod state;
+
+
+=== ./bootstrap/src/state.rs ===
+use application::{Container, HasCreateUserUc, HasObservability};
+use contracts::ports::MetricsRegistry;
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub config: Arc<crate::config::Config>,
+    pub registry: Arc<prometheus::Registry>,
+    pub container: Arc<Container>,
+}
+
+impl MetricsRegistry for AppState {
+    fn registry(&self) -> &prometheus::Registry {
+        &self.registry
+    }
+}
+
+impl application::use_cases::create_user::HasCreateUserUc for AppState {
+    fn create_user_uc(&self) -> Arc<dyn application::use_cases::create_user::CreateUserUseCase> {
+        self.container.create_user_uc()
+    }
+}
+
+impl HasObservability for AppState {
+    fn observability(&self) -> contracts::ports::DynObservability {
+        self.container.observability()
+    }
+}
+
+
+=== ./bootstrap/src/main.rs ===
+use bootstrap::{app::Application, config::Config};
+use dotenvy::dotenv;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenv().ok();
+
+    let config = Config::load().expect("Failed to load configuration.");
+
+    let application = Application::build(config).await?;
+    application.run_until_stopped().await?;
+
+    tracing::info!("Telemetry provider shut down gracefully.");
+
+    Ok(())
+}
+
+
+=== ./bootstrap/src/app.rs ===
+use crate::config::Config;
+use crate::factory::DependencyFactory;
+use crate::state::AppState;
+use application::HasObservability;
+use axum::{middleware, routing::get, Router};
+use hyper::header::{HeaderName, HeaderValue};
+use infra_telemetry::{config::TelemetryConfig, telemetry};
+use pres_web_axum::{handlers, middleware::telemetry_middleware};
+use tower::ServiceBuilder;
+
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::net::TcpListener;
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
+use tower_http::{
+    request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
+    set_header::SetResponseHeaderLayer,
+    trace::TraceLayer,
+};
+
+pub struct Application {
+    router: Router,
+    listener: TcpListener,
+}
+
+impl Application {
+    pub async fn build(config: Config) -> Result<Self, Box<dyn std::error::Error>> {
+        let telemetry_cfg: TelemetryConfig = TelemetryConfig {
+            otel_service_name: config.otel_service_name.clone(),
+            otel_exporter_otlp_endpoint: config.otel_exporter_otlp_endpoint.clone(),
+            prometheus_path: "/metrics".to_string(),
+            log_level: config.log_level.clone(),
+        };
+        let registry = telemetry::init_telemetry(&telemetry_cfg)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+        std::panic::set_hook(Box::new(telemetry::panic_hook));
+
+        // 使用依賴工廠創建容器
+        let container = DependencyFactory::create_container(&config).await?;
+
+        let app_state = AppState {
+            config: Arc::new(config.clone()),
+            registry: Arc::new(registry),
+            container: Arc::new(container),
+        };
+
+        // Configure Governor for rate limiting using values from Config
+        let governor_config = Arc::new(
+            GovernorConfigBuilder::default()
+                .per_second(config.rate_limit_per_second)
+                .burst_size(config.rate_limit_burst_size)
+                .finish()
+                .unwrap(),
+        );
+        let common_layers = ServiceBuilder::new()
+            .layer(axum::extract::Extension(
+                app_state.container.observability(),
+            ))
+            .layer(middleware::from_fn(
+                telemetry_middleware::axum_metrics_middleware,
+            ))
+            .layer(TraceLayer::new_for_http())
+            .layer(PropagateRequestIdLayer::x_request_id())
+            .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+            .layer(GovernorLayer {
+                config: governor_config,
+            });
+
+        let tracked_routes = Router::new()
+            .route("/", get(handlers::main_handler::<AppState>))
+            .route("/test_error", get(handlers::test_error_handler))
+            .route("/test_panic", get(handlers::panic_handler))
+            .route("/healthz/live", get(handlers::live_handler))
+            .route("/healthz/ready", get(handlers::ready_handler))
+            .route("/info", get(handlers::info_handler))
+            // User routes
+            .route(
+                "/users",
+                axum::routing::post(handlers::create_user_handler::<AppState>),
+            );
+
+        let untracked_routes =
+            Router::new().route("/metrics", get(handlers::metrics_handler::<AppState>));
+
+        // ✅ 將兩個 Router 合併，並應用最終的 state
+        let mut router = Router::new()
+            .merge(tracked_routes)
+            .merge(untracked_routes)
+            .layer(common_layers);
+
+        if let Some(headers_config) = &app_state.config.http_headers {
+            for header_config in headers_config {
+                let header_name = HeaderName::from_bytes(header_config.name.as_bytes())
+                    .unwrap_or_else(|_| {
+                        panic!("Invalid header name in config: {}", header_config.name)
+                    });
+                let header_value =
+                    HeaderValue::from_str(&header_config.value).unwrap_or_else(|_| {
+                        panic!(
+                            "Invalid header value for {}: {}",
+                            header_config.name, header_config.value
+                        )
+                    });
+                router = router.layer(SetResponseHeaderLayer::if_not_present(
+                    header_name.clone(), // Clone since it's used in the error message too
+                    header_value,
+                ));
+            }
+        }
+
+        let router = router.with_state(app_state);
+
+        let addr = SocketAddr::from(([127, 0, 0, 1], config.port));
+        let listener = TcpListener::bind(addr).await?;
+        tracing::info!("Listening on {}", addr);
+
+        Ok(Application { router, listener })
+    }
+
+    pub async fn run_until_stopped(self) -> Result<(), std::io::Error> {
+        tracing::info!("Application started. Press Ctrl+C to shut down.");
+        axum::serve(
+            self.listener,
+            self.router
+                .into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(shutdown_signal()) // Pass hooks
+        .await
+    }
+}
+
+// ✅ [關鍵新增] 添加一個異步函數來監聽操作系統的關閉信號
+async fn shutdown_signal() {
+    // Accept hooks
+    // 創建一個 Future 來處理 Ctrl+C 信號
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    // 僅在 Unix 系統上創建一個 Future 來處理 TERM 信號
+    // Kubernetes 等容器編排平台會發送 SIGTERM 來終止 Pod
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    // 在 Windows 上，我們只等待 Ctrl+C
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    // 使用 tokio::select! 宏來等待任何一個信號
+    // `tokio::select!` 會在第一個完成的 Future 上停止等待，並取消其他的 Future
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    tracing::warn!("Signal received, starting graceful shutdown...");
+
+    tracing::info!("All resources shut down gracefully.");
+}
+
+
+=== ./config/default.toml ===
+# config/default.toml
+# 這是服務的默認配置。
+# 可以在生產環境中通過環境變量來覆蓋這些值。
+
+port = 8080
+log_level = "warn"
+otel_service_name = "{{ project_name }}"
+
+# 注意: 對於本地開發，您可能需要一個 OTLP 收集器 (如 Jaeger 或 OpenTelemetry Collector)
+# 在此地址上運行，以便接收追踪數據。
+otel_exporter_otlp_endpoint = "http://localhost:4317"
+
+# Rate Limiting
+rate_limit_per_second = 1
+rate_limit_burst_size = 50
+
+# Database Configuration
+database_url = "postgres://myuser:mypassword@localhost:5432/mydb"
+db_max_conn = 5
+
+# HTTP Headers
+# You can define a list of HTTP headers to be added to every response.
+# These are applied if the header is not already present in the response.
+[[http_headers]]
+name = "X-Content-Type-Options"
+value = "nosniff"
+
+[[http_headers]]
+name = "X-Frame-Options"
+value = "DENY"
+
+[[http_headers]]
+name = "Content-Security-Policy"
+value = "default-src 'self'; frame-ancestors 'none'"
+
+# Example of a custom header:
+# [[http_headers]]
+# name = "X-My-Custom-Header"
+# value = "MyCustomValue"
+
+
+=== ./config/production.toml ===
+# Production environment configuration
+port = 8080
+log_level = "info"
+otel_service_name = "rust-service-scaffold"
+otel_exporter_otlp_endpoint = "http://otel-collector:4317"
+rate_limit_per_second = 10
+rate_limit_burst_size = 50
+database_url = "postgres://user:password@postgres:5432/prod_db"
+db_max_conn = 20
+
+[[http_headers]]
+name = "X-Environment"
+value = "production"
+
+[[http_headers]]
+name = "X-Content-Type-Options"
+value = "nosniff"
+
+=== ./config/development.toml ===
+# Development environment configuration
+port = 8080
+log_level = "debug"
+otel_service_name = "rust-service-scaffold-dev"
+otel_exporter_otlp_endpoint = "http://localhost:4317"
+rate_limit_per_second = 100
+rate_limit_burst_size = 200
+database_url = "postgres://user:password@localhost:5432/dev_db"
+db_max_conn = 5
+
+[[http_headers]]
+name = "X-Environment"
+value = "development"
+
+=== ./cargo-generate.toml ===
+# `cargo-generate` 設定檔
+
+[template]
+# 模板生成後要執行的命令。
+# 這裡我們在生成後顯示一些友善的提示。
+hooks = ["{{- project-name -}}/hooks/post_gen_hook.sh"]
+
+[vars]
+# 定義專案名稱變數
+# `type` 是 string，`prompt` 是互動式提示文字，`default` 是預設值
+project_name = { type = "string", prompt = "What is the name of your new project?", default = "my-awesome-axum-app" }
+
+# 作者資訊，預設會嘗試從 cargo config 或 git config 讀取
+authors = { type = "string", prompt = "Enter author name and email <NAME ...>", default = "Your Name <your.email@example.com>" }
+
+# 資料庫設定，這些變數將被用在 `config/default.toml` 中
+db_user = { type = "string", prompt = "Database user name", default = "myuser" }
+db_password = { type = "string", prompt = "Database user password", default = "mypassword", private = true } # private=true 表示這是一個敏感值
+
+[hooks]
+# 預留的 hook 設定，可以在生成前後執行腳本
+# post = ["./hooks/post-gen.sh"] # 例如
+
+
+=== ./.cargo/audit.toml ===
+[advisories]
+ignore = [
+    "RUSTSEC-2023-0071",  # RSA timing attack - from sqlx-mysql (we only use postgres)
+    "RUSTSEC-2024-0437"   # protobuf recursion - from prometheus (waiting for upstream fix)
+]
+
+=== ./presentation/pres_web_axum/Cargo.toml ===
+[package]
+name = "pres_web_axum"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT OR Apache-2.0"
+description = "Web presentation layer using Axum in hexagonal architecture template"
+repository = "https://github.com/your-username/axum_hexagonal_template"
+readme = "../../README.md"
+
+[dependencies]
+# --- Core ---
+axum = { workspace = true }
+hyper = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tower_governor = { workspace = true }
+tokio = { workspace = true }
+
+# --- Logging & Telemetry ---
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry-semantic-conventions = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+prometheus = { workspace = true }
+
+# --- Serialization & Validation ---
+serde = { workspace = true }
+serde_json = { workspace = true }
+validator = { workspace = true }
+
+# --- Error Handling & Utilities ---
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+once_cell = { workspace = true }
+uuid = { workspace = true }
+
+# --- Workspace Internal Dependencies ---
+contracts = { path = "../../crates/contracts" }
+application = { path = "../../crates/application" }
+# infra_telemetry = { path = "../../crates/infra_telemetry" } # Removed as it's now accessed via ObservabilityPort
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+reqwest = { workspace = true }
+tracing-futures = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+
+[features]
+default = []
+
+[package.metadata]
+# 可以補充 CI 規則、編譯器設定等自定義欄位
+[build-dependencies]
+vergen = { version = "8", features = ["build", "git", "gitcl"] }
+
+
+=== ./presentation/pres_web_axum/build.rs ===
+// build.rs
+use vergen::EmitBuilder;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Emit the instructions
+    EmitBuilder::builder().all_build().all_git().emit()?;
+    Ok(())
+}
+
+
+=== ./presentation/pres_web_axum/src/middleware/telemetry_middleware.rs ===
+use std::time::Instant;
+
+use axum::body::Body;
+use axum::extract::MatchedPath;
+use axum::http::Request;
+use axum::middleware::Next;
+use axum::response::IntoResponse;
+use axum::Extension;
+use contracts::ports::DynObservability; // Added for ObservabilityPort
+
+// 把 ObservabilityPort trait object 傳進來 (可透過 extension or app_state)
+pub async fn axum_metrics_middleware(
+    Extension(obs): Extension<DynObservability>,
+    req: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    // 先把 method、path 抓出來 clone 成 String
+    let method = req.method().as_str().to_owned();
+    let path = req
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|m| m.as_str().to_owned())
+        .unwrap_or_else(|| req.uri().path().to_owned());
+
+    // Use the ObservabilityPort trait object
+    obs.on_request_start(&method, &path).await;
+
+    let start = Instant::now();
+
+    // 這時 req 沒有任何借用，可以直接 move
+    let response = next.run(req).await;
+
+    let latency = start.elapsed().as_secs_f64();
+    let status = response.status().as_u16();
+
+    // Use the ObservabilityPort trait object
+    obs.on_request_end(&method, &path, status, latency).await;
+
+    response
+}
+
+
+=== ./presentation/pres_web_axum/src/middleware/mod.rs ===
+// presentation/pres_web_axum/src/middleware/mod.rs
+
+pub mod telemetry_middleware;
+
+// Potentially other middlewares can be added here later
+// pub mod auth_middleware;
+// pub mod logging_middleware;
+
+
+=== ./presentation/pres_web_axum/src/error.rs ===
+use axum::{http::StatusCode, response::IntoResponse, Json};
+use contracts::{AppError, DomainError};
+use serde::Serialize;
+
+#[derive(Debug)]
+pub struct ApiError(pub AppError);
+
+impl From<AppError> for ApiError {
+    fn from(e: AppError) -> Self {
+        Self(e)
+    }
+}
+
+#[derive(Serialize)]
+struct ErrBody<'a> {
+    code: &'a str,
+    message: String,
+}
+
+#[derive(Serialize)]
+struct ErrResp<'a> {
+    error: ErrBody<'a>,
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        let status =
+            StatusCode::from_u16(self.0.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+
+        let code = match &self.0 {
+            AppError::Domain(DomainError::Validation(_)) => "VALIDATION_ERROR",
+            AppError::Domain(DomainError::NotFound(_)) => "NOT_FOUND",
+            AppError::Domain(DomainError::BusinessRule(_)) => "BUSINESS_RULE_VIOLATION",
+            AppError::Domain(DomainError::InvalidOperation(_)) => "INVALID_OPERATION",
+            AppError::Infrastructure(_) => "INFRASTRUCTURE_ERROR",
+            AppError::Application(_) => "APPLICATION_ERROR",
+            AppError::Validation(_) => "VALIDATION_ERROR",
+        };
+
+        let body = ErrResp {
+            error: ErrBody {
+                code,
+                message: self.0.to_string(),
+            },
+        };
+
+        (status, Json(body)).into_response()
+    }
+}
+
+
+=== ./presentation/pres_web_axum/src/lib.rs ===
+pub mod dtos;
+pub mod error;
+pub mod handlers;
+pub mod middleware;
+
+// Re-export for backward compatibility
+pub use handlers::*;
+
+
+=== ./presentation/pres_web_axum/src/dtos/response.rs ===
+use contracts::ports::User as DomainUser;
+use serde::Serialize;
+
+#[derive(Serialize, Debug)]
+pub struct UserResponse {
+    pub id: String,
+    pub name: String,
+}
+
+impl From<DomainUser> for UserResponse {
+    fn from(domain_user: DomainUser) -> Self {
+        UserResponse {
+            id: domain_user.id.to_string(),
+            name: domain_user.name,
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub struct SuccessResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+
+=== ./presentation/pres_web_axum/src/dtos/request.rs ===
+use serde::Deserialize;
+use validator::Validate;
+
+#[derive(Deserialize, Debug, Validate)]
+pub struct CreateUserRequest {
+    #[validate(length(
+        min = 1,
+        max = 100,
+        message = "Name must be between 1 and 100 characters"
+    ))]
+    pub name: String,
+}
+
+
+=== ./presentation/pres_web_axum/src/dtos/mod.rs ===
+pub mod request;
+pub mod response;
+
+pub use request::*;
+pub use response::*;
+
+
+=== ./presentation/pres_web_axum/src/handlers/health.rs ===
+use axum::{http::StatusCode, response::IntoResponse, Json};
+use serde_json::json;
+
+/// /healthz/live - Liveness Probe
+pub async fn live_handler() -> impl IntoResponse {
+    (StatusCode::OK, Json(json!({ "status": "ok" })))
+}
+
+/// /healthz/ready - Readiness Probe
+pub async fn ready_handler() -> impl IntoResponse {
+    (StatusCode::OK, Json(json!({ "status": "ready" })))
+}
+
+
+=== ./presentation/pres_web_axum/src/handlers/user.rs ===
+use crate::{
+    dtos::{CreateUserRequest, UserResponse},
+    error::ApiError,
+};
+use application::{error::AppError, use_cases::create_user::CreateUserCmd};
+use axum::{extract::State, Json};
+
+pub async fn create_user_handler<S>(
+    State(app_state): State<S>,
+    Json(payload): Json<CreateUserRequest>,
+) -> Result<Json<UserResponse>, ApiError>
+where
+    S: application::use_cases::create_user::HasCreateUserUc + Send + Sync + 'static,
+{
+    tracing::info!("Creating user with name: {}", payload.name);
+
+    let user = app_state
+        .create_user_uc()
+        .exec(CreateUserCmd { name: payload.name })
+        .await
+        .map_err(AppError::Domain)?;
+
+    tracing::info!("User created with ID: {}", user.id);
+    Ok(Json(UserResponse::from(user)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dtos::CreateUserRequest;
+    use application::use_cases::create_user::{CreateUserUseCase, HasCreateUserUc};
+    use async_trait::async_trait;
+    use contracts::ports::{DomainError, User};
+    use std::sync::Arc;
+    use uuid::Uuid;
+
+    struct MockAppState;
+
+    #[async_trait]
+    impl CreateUserUseCase for MockAppState {
+        async fn exec(&self, _cmd: CreateUserCmd) -> Result<User, DomainError> {
+            Ok(User {
+                id: Uuid::new_v4(),
+                name: "Test User".to_string(),
+            })
+        }
+    }
+
+    impl HasCreateUserUc for MockAppState {
+        fn create_user_uc(&self) -> Arc<dyn CreateUserUseCase> {
+            Arc::new(MockAppState)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_user_handler_success() {
+        let app_state = MockAppState;
+        let request = CreateUserRequest {
+            name: "John Doe".to_string(),
+        };
+
+        let result = create_user_handler(axum::extract::State(app_state), Json(request)).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response.0.name, "Test User");
+    }
+}
+
+
+=== ./presentation/pres_web_axum/src/handlers/mod.rs ===
+pub mod health;
+pub mod main;
+pub mod user;
+
+// Re-export all handlers
+pub use health::*;
+pub use main::*;
+pub use user::*;
+
+
+=== ./presentation/pres_web_axum/src/handlers/main.rs ===
+use application::error::AppError;
+use axum::{
+    extract::{Query, State},
+    response::IntoResponse,
+    Extension,
+};
+use axum::{http::StatusCode, Json};
+use contracts::ports::DomainError;
+use contracts::ports::MetricsRegistry;
+use prometheus::{Encoder, TextEncoder};
+use serde::{Deserialize, Serialize};
+use tower_http::request_id::RequestId;
+
+use crate::error::ApiError;
+
+#[derive(Deserialize)]
+pub struct HandlerParams {
+    make_error: Option<bool>,
+}
+
+#[derive(Serialize)]
+pub struct BuildInfo {
+    build_timestamp: &'static str,
+    git_commit_hash: &'static str,
+    git_branch: &'static str,
+}
+
+pub async fn main_handler<S>(
+    State(_app_state): State<S>,
+    Extension(request_id_extension): Extension<RequestId>,
+    Query(params): Query<HandlerParams>,
+) -> Result<String, ApiError>
+where
+    S: Send + Sync + 'static,
+{
+    let request_id = request_id_extension
+        .header_value()
+        .to_str()
+        .unwrap_or("unknown");
+
+    tracing::info!(
+        request_id = %request_id,
+        "Processing request for the main handler"
+    );
+
+    if params.make_error.unwrap_or(false) {
+        tracing::warn!(request_id = %request_id, "Simulating a validation error.");
+        return Err(AppError::Domain(DomainError::Validation(
+            "User triggered a bad request".to_string(),
+        ))
+        .into());
+    }
+
+    tracing::info!(request_id = %request_id, "Request processing finished successfully.");
+    Ok(format!("Hello, World! Your Request ID is: {}", request_id))
+}
+
+pub async fn test_error_handler() -> Result<&'static str, ApiError> {
+    Err(AppError::Domain(DomainError::InvalidOperation(
+        "This is a test error triggered from the /test_error route.".to_string(),
+    ))
+    .into())
+}
+
+pub async fn info_handler() -> Json<BuildInfo> {
+    let info = BuildInfo {
+        build_timestamp: env!("VERGEN_BUILD_TIMESTAMP"),
+        git_commit_hash: env!("VERGEN_GIT_SHA"),
+        git_branch: env!("VERGEN_GIT_BRANCH"),
+    };
+    Json(info)
+}
+
+#[allow(unreachable_code)]
+pub async fn panic_handler() -> Result<impl IntoResponse, ApiError> {
+    panic!("This is a test panic deliberately triggered from the /test_panic route!");
+    Ok("This response will never be sent.")
+}
+
+pub async fn metrics_handler<S>(State(app_state): State<S>) -> impl IntoResponse
+where
+    S: MetricsRegistry + Send + Sync + 'static,
+{
+    let mut buffer = Vec::new();
+    let encoder = TextEncoder::new();
+
+    if let Err(e) = encoder.encode(&app_state.registry().gather(), &mut buffer) {
+        tracing::error!("Failed to encode prometheus metrics: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to encode metrics: {}", e),
+        )
+            .into_response()
+    } else {
+        (
+            StatusCode::OK,
+            [("Content-Type", prometheus::TEXT_FORMAT)],
+            buffer,
+        )
+            .into_response()
+    }
+}
+
+
