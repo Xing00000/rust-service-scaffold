@@ -32,6 +32,9 @@ members = [
     "presentation/pres_web_axum", 
     "crates/contracts", 
     "crates/infra_db_postgres",
+    
+    # --- Test Utilities ---
+    "test_telemetry",
 ]
 
 # Default package metadata that can be inherited by member crates.
@@ -69,17 +72,12 @@ tokio = { version = "1", default-features = false, features = ["full"] } # `macr
 # --- Logging & Telemetry ---
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["env-filter", "json", "registry", "fmt"] }
-opentelemetry = { version = "0.28.0", default-features = false, features = ["trace", "metrics"] }
-opentelemetry_sdk = { version = "0.28.0", default-features = false, features = [
-    "rt-tokio",
-    "trace",
-    "metrics",
-] }
+opentelemetry = "0.30"
+opentelemetry_sdk = { version = "0.30", features = ["metrics"] }
 opentelemetry-otlp = { version = "0.28.0", features = ["tonic", "trace"] }
 opentelemetry-semantic-conventions = "0.28.0"
-opentelemetry-prometheus = "0.28.0"
 tracing-opentelemetry = "0.29.0"
-prometheus = { version = "0.13.4", default-features = false, features = ["process"] }
+prometheus = { version = "0.14", default-features = true }
 
 # --- Error Handling ---
 thiserror = "1.0.58"
@@ -102,6 +100,9 @@ reqwest = { version = "0.12.20", default-features = false, features = ["json"] }
 tracing-futures = "0.2"
 vergen = { version = "8", default-features = false, features = ["build", "git", "gitcl"] }
 mockall = "0.12"
+
+
+
 # ===================================================================
 #                    Build Profiles
 # ===================================================================
@@ -141,3 +142,4 @@ rust_2018_idioms = "deny"
 unused_imports = "deny"
 
 # …依照喜好補
+

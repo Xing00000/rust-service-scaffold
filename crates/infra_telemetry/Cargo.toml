@@ -22,7 +22,7 @@ opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 opentelemetry-semantic-conventions = { workspace = true }
-opentelemetry-prometheus = { workspace = true }
+
 prometheus = { workspace = true }
 
 # --- 基本公用套件 ---
