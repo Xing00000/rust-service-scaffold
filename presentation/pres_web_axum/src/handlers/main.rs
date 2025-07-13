@@ -52,7 +52,7 @@ where
     }
 
     tracing::info!(request_id = %request_id, "Request processing finished successfully.");
-    Ok(format!("Hello, World! Your Request ID is: {}", request_id))
+    Ok(format!("Hello, World! Your Request ID is: {request_id}"))
 }
 
 pub async fn test_error_handler() -> Result<&'static str, ApiError> {
@@ -88,7 +88,7 @@ where
         tracing::error!("Failed to encode prometheus metrics: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to encode metrics: {}", e),
+            format!("Failed to encode metrics: {e}"),
         )
             .into_response()
     } else {

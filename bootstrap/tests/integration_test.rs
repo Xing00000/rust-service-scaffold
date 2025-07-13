@@ -41,7 +41,7 @@ async fn test_handler(Extension(request_id_extension): Extension<RequestId>) -> 
         .unwrap_or("unknown")
         .to_string();
     tracing::info!(request_id = %request_id, "Test handler processing request");
-    format!("Hello from test! Request ID: {}", request_id)
+    format!("Hello from test! Request ID: {request_id}")
 }
 
 // 這個測試不涉及全域狀態，保持原樣
@@ -137,13 +137,13 @@ fn test_panic_hook_logs_details() {
     if logs.is_empty() {
         panic!("FAILED: No logs were captured!");
     }
-    println!("--- CAPTURED LOGS ---\n{}\n--- END LOGS ---", logs);
+    println!("--- CAPTURED LOGS ---\n{logs}\n--- END LOGS ---");
 
     // 解析日誌並進行精確斷言
     let mut panic_log_found = false;
     for line in logs.lines().filter(|l| !l.is_empty()) {
         let log_entry: Value = serde_json::from_str(line)
-            .unwrap_or_else(|e| panic!("Failed to parse log line as JSON: {}\nLine: {}", e, line));
+            .unwrap_or_else(|e| panic!("Failed to parse log line as JSON: {e}\nLine: {line}"));
 
         // 我們要找的是由 panic_hook 產生的日誌
         if log_entry["target"] == "panic" {
@@ -214,7 +214,7 @@ fn unit_test_logging_module() {
         }
 
         let log_entry: Value = serde_json::from_str(line)
-            .unwrap_or_else(|_| panic!("Log line should be valid JSON. Failed on line: {}", line));
+            .unwrap_or_else(|_| panic!("Log line should be valid JSON. Failed on line: {line}"));
 
         if let Some(message) = log_entry["fields"]["message"].as_str() {
             if message == "A panic occurred" {
@@ -296,16 +296,13 @@ fn test_global_panic_hook_logs_from_tokio_task() {
     if logs.is_empty() {
         panic!("FAILED: No logs were captured!");
     }
-    println!(
-        "--- CAPTURED LOGS (global_panic_hook) ---\n{}\n--- END LOGS ---",
-        logs
-    );
+    println!("--- CAPTURED LOGS (global_panic_hook) ---\n{logs}\n--- END LOGS ---");
 
     // 解析日誌並進行精確斷言
     let mut panic_log_found = false;
     for line in logs.lines().filter(|l| !l.is_empty()) {
         let log_entry: Value = serde_json::from_str(line)
-            .unwrap_or_else(|e| panic!("Failed to parse log line as JSON: {}\nLine: {}", e, line));
+            .unwrap_or_else(|e| panic!("Failed to parse log line as JSON: {e}\nLine: {line}"));
 
         // 尋找由 panic_hook 產生的日誌
         if log_entry["target"] == "panic" {

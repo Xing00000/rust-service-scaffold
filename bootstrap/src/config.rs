@@ -53,7 +53,7 @@ impl Config {
 
         let config: Config = Figment::new()
             .merge(Toml::file("config/default.toml"))
-            .merge(Toml::file(format!("config/{}.toml", env)))
+            .merge(Toml::file(format!("config/{env}.toml")))
             .merge(Env::prefixed("APP_"))
             .extract()
             .map_err(|e| ConfigError::Load(Box::new(e)))?;

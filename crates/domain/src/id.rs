@@ -43,7 +43,7 @@ mod tests {
     #[test]
     fn test_user_id_display() {
         let user_id = UserId::from_string("display-test".to_string());
-        assert_eq!(format!("{}", user_id), "display-test");
+        assert_eq!(format!("{user_id}"), "display-test");
     }
 
     #[test]
