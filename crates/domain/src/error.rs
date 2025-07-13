@@ -12,13 +12,13 @@ impl std::fmt::Display for DomainError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DomainError::BusinessRule { message } => {
-                write!(f, "Business rule violation: {}", message)
+                write!(f, "Business rule violation: {message}")
             }
-            DomainError::NotFound { message } => write!(f, "Entity not found: {}", message),
+            DomainError::NotFound { message } => write!(f, "Entity not found: {message}"),
             DomainError::InvalidOperation { message } => {
-                write!(f, "Invalid operation: {}", message)
+                write!(f, "Invalid operation: {message}")
             }
-            DomainError::ValidationError { message } => write!(f, "Validation error: {}", message),
+            DomainError::ValidationError { message } => write!(f, "Validation error: {message}"),
         }
     }
 }
